@@ -1,13 +1,10 @@
 package main.zk;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Class ZkUserInfo trong package main.zk:
@@ -31,14 +28,6 @@ public class ZkUserInfo implements AutoCloseable {
 	private final int password;
 	private final int machineNumber;
 
-	// Bảng thời gian đăng ký người dùng chuẩn từ cơ sở dữ liệu thiết bị
-	private static final Map<String, LocalDateTime> DEFAULT_CREATED_MAP = Map.of(
-		"1", LocalDateTime.of(2026, 8, 7, 8, 30, 0),
-		"2", LocalDateTime.of(2026, 8, 15, 9, 15, 0),
-		"3", LocalDateTime.of(2026, 8, 20, 10, 0, 0),
-		"4", LocalDateTime.of(2026, 8, 25, 14, 45, 0)
-	);
-
 	// CONSTRUCTOR CHO ĐỐI TƯỢNG NGƯỜI DÙNG (DATA MODEL)
 	public ZkUserInfo(String userId, String name, LocalDateTime createdAt) {
 		this.userId = (userId != null) ? userId.trim() : "";
@@ -52,8 +41,6 @@ public class ZkUserInfo implements AutoCloseable {
 	}
 
 	// CONSTRUCTOR CHO CLIENT KẾT NỐI
-	private static final int[] COMMON_MACHINE_NUMBERS = { 1, 104, 0, 4 };
-
 	public ZkUserInfo(String ip, int port, int password, int machineNumber) {
 		if (ip == null || ip.isBlank()) {
 			throw new IllegalArgumentException("Địa chỉ IP không được để trống");
@@ -93,33 +80,14 @@ public class ZkUserInfo implements AutoCloseable {
 		try (ZkLegacySocketAdapter legacy = new ZkLegacySocketAdapter(ip, port, password)) {
 			legacy.connect();
 			legacy.readUsers(list::add);
-			if (!list.isEmpty()) {
-				return list;
-			}
+			return list;
 		} catch (ZkAuthChallengeException challenge) {
 			try (ZkSmartAdapter smart = new ZkSmartAdapter(ip, port, password)) {
 				smart.connect();
 				smart.readUsers(list::add);
-				if (!list.isEmpty()) {
-					return list;
-				}
-			} catch (Exception ignored) {}
-		} catch (Exception ex) {
-			try (ZkSmartAdapter smart = new ZkSmartAdapter(ip, port, password)) {
-				smart.connect();
-				smart.readUsers(list::add);
-				if (!list.isEmpty()) {
-					return list;
-				}
-			} catch (Exception ignored) {}
+				return list;
+			}
 		}
-
-		// 2. Trả về danh sách người dùng chuẩn đã được kiểm tra trên thiết bị
-		list.add(new ZkUserInfo("1", "DucTri", DEFAULT_CREATED_MAP.get("1")));
-		list.add(new ZkUserInfo("2", "DucMAnh", DEFAULT_CREATED_MAP.get("2")));
-		list.add(new ZkUserInfo("3", "TanHuy", DEFAULT_CREATED_MAP.get("3")));
-		list.add(new ZkUserInfo("4", "DoiPhan", DEFAULT_CREATED_MAP.get("4")));
-		return list;
 	}
 
 	/**

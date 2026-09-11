@@ -72,6 +72,35 @@ public final class ZkRecordParser {
 		}
 	}
 
+	public static int detectRecordSize(int totalBytes) {
+		if (totalBytes <= 0) {
+			return 40;
+		}
+		if (totalBytes % 40 == 0) {
+			return 40;
+		}
+		if (totalBytes % 36 == 0) {
+			return 36;
+		}
+		if (totalBytes % 16 == 0) {
+			return 16;
+		}
+		return 40;
+	}
+
+	public static void parseFixedSize(byte[] rawData, int recordSize, Consumer<ZkAttendanceLog> consumer) {
+		if (rawData == null || rawData.length < recordSize || consumer == null) {
+			return;
+		}
+		int count = rawData.length / recordSize;
+		for (int i = 0; i < count; i++) {
+			ZkAttendanceLog log = parseSingleRecord(rawData, i * recordSize, recordSize);
+			if (log != null) {
+				consumer.accept(log);
+			}
+		}
+	}
+
 	/**
 	 * Giải mã dữ liệu nhị phân và trả về danh sách List.
 	 */

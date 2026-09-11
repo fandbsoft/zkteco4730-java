@@ -38,9 +38,7 @@ public class ZkLegacySocketAdapter extends AbstractZkSocketAdapter {
 		}
 
 		if (respCode == ZkConstants.CMD_ACK_OK) {
-			if (password > 0) {
-				authenticate(password);
-			}
+			// The device accepted the session without a Comm Key challenge.
 		} else if (respCode == ZkConstants.CMD_ACK_UNAUTH) {
 			authenticate(password);
 		} else {
@@ -102,9 +100,14 @@ public class ZkLegacySocketAdapter extends AbstractZkSocketAdapter {
 			readLogsBuffered(consumer);
 		} catch (ZkAuthChallengeException ex) {
 			throw ex;
-		} catch (Exception ignored) {
+		} catch (Exception bufferedFailure) {
 			// Dự phòng đọc trực tiếp CMD_ATTLOG_RRQ (13)
-			readLogsDirect(consumer);
+			try {
+				readLogsDirect(consumer);
+			} catch (Exception directFailure) {
+				bufferedFailure.addSuppressed(directFailure);
+				throw bufferedFailure;
+			}
 		} finally {
 			try {
 				enableDevice();

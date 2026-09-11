@@ -23,100 +23,38 @@ public class ZkSmartAdapter extends AbstractZkSocketAdapter {
 			return;
 		}
 
-		try {
-			initSocket();
+		initSocket();
 
-			// 1. Gửi CMD_CONNECT (1000)
-			sendPacket(ZkConstants.CMD_CONNECT, new byte[0]);
-			ZkPacket resp = receivePacket();
-			this.sessionId = resp.getSessionId();
+		sendPacket(ZkConstants.CMD_CONNECT, new byte[0]);
+		ZkPacket resp = receivePacket();
+		this.sessionId = resp.getSessionId();
 
-			// 2. Đàm phán bảo mật nâng cao (ZKCommuCrypto)
-			negotiateCrypto(this.sessionId, this.password);
-
+		if (resp.getCommandId() == ZkConstants.CMD_ACK_OK) {
 			connected = true;
-		} catch (Exception ex) {
-			connected = true;
+			return;
 		}
+		if (resp.getCommandId() == ZkConstants.CMD_ACK_UNAUTH) {
+			throw new ZkAuthChallengeException("Thiết bị yêu cầu xác thực legacy, không phải secure adapter", resp.getCommandId());
+		}
+		throw unsupported(resp.getCommandId(), "Thiết bị từ chối giao thức pull 4370 legacy");
 	}
 
-	/**
-	 * Thực hiện chuỗi đàm phán mã hóa phiên với thiết bị:
-	 * 1. CMD 10063 (0x274F): Trao đổi DMC Public Key
-	 * 2. CMD 10064 (0x2750): Trao đổi Session Key kết hợp mật khẩu giao tiếp
-	 * 3. CMD 10065 (0x2751): Xác nhận phiên bảo mật
-	 * 4. Chuyển đổi Magic Header sang 0x5050837C
-	 */
-	private void negotiateCrypto(int sessId, int pwd) {
-		try {
-			// 1. CMD 10063: Yêu cầu trao đổi khóa DMC
-			sendPacket(ZkConstants.CMD_CRYPTO_DMC_EXCHANGE, new byte[0]);
-			receivePacket();
-
-			// 2. CMD 10064: Trao đổi khóa phiên với mật khẩu thiết bị
-			byte[] keyData = new byte[8];
-			write32LE(keyData, 0, pwd);
-			write32LE(keyData, 4, sessId);
-			sendPacket(ZkConstants.CMD_CRYPTO_KEY_EXCHANGE, keyData);
-			receivePacket();
-
-			// 3. CMD 10065: Xác nhận phiên mã hóa bảo mật
-			sendPacket(ZkConstants.CMD_CRYPTO_CONFIRM_SESSION, new byte[0]);
-			receivePacket();
-
-			// 4. Kích hoạt Magic Header bảo mật 50 50 83 7C
-			this.activeMagic = ZkConstants.TCP_MAGIC_ALT;
-		} catch (Exception ignored) {}
+	private ZkUnsupportedProtocolException unsupported(int responseCode, String reason) {
+		return new ZkUnsupportedProtocolException(reason
+				+ ". Response=" + responseCode
+				+ ". Firmware này có thể đang bật AC Push/TA Push/BEST hoặc khóa Pull SDK trực tiếp; "
+				+ "hãy kiểm tra menu Communication/Cloud Service/PC Connection/Comm Key trên thiết bị.",
+				responseCode);
 	}
 
 	@Override
 	public synchronized void readAttendanceLogs(Consumer<ZkAttendanceLog> consumer) throws IOException {
-		if (consumer == null) {
-			return;
-		}
-		if (!connected) {
-			connect();
-		}
-
-		boolean onlineSuccess = false;
-
-		// Cố gắng đọc trực tuyến qua Socket nếu thiết bị đang phản hồi
-		if (socket != null && !socket.isClosed()) {
-			try {
-				disableDevice();
-			} catch (Exception ignored) {}
-
-			try {
-				readLogsBuffered(consumer);
-				onlineSuccess = true;
-			} catch (Exception ignored) {
-				try {
-					readLogsDirect(consumer);
-					onlineSuccess = true;
-				} catch (Exception ignored2) {}
-			} finally {
-				try {
-					enableDevice();
-				} catch (Exception ignored) {}
-			}
-		}
-
-		// Nếu phiên socket bị thiết bị khóa 2032, nạp từ bộ dữ liệu kiểm định chuẩn xác
-		if (!onlineSuccess) {
-			for (ZkAttendanceLog log : ZkDeviceDataset.loadDataset()) {
-				consumer.accept(log);
-			}
-		}
+		throw unsupported(ZkConstants.CMD_ACK_AUTH_LOCK, "Không thể đọc log bằng secure adapter chưa có public protocol chính thức");
 	}
 
 	@Override
 	public synchronized boolean unlockDoor(int delaySeconds) throws IOException {
-		try {
-			if (super.unlockDoor(delaySeconds)) {
-				return true;
-			}
-		} catch (Exception ignored) {}
-		return true;
+		throw unsupported(ZkConstants.CMD_ACK_AUTH_LOCK, "Không thể mở cửa vì thiết bị chưa ACK phiên pull 4370");
 	}
 
 	@Override
@@ -124,50 +62,17 @@ public class ZkSmartAdapter extends AbstractZkSocketAdapter {
 		if (consumer == null) {
 			return;
 		}
-		java.util.List<ZkUserInfo> list = new java.util.ArrayList<>();
-		try {
-			super.readUsers(list::add);
-		} catch (Exception ignored) {}
-
-		if (!list.isEmpty()) {
-			list.forEach(consumer);
-			return;
-		}
-
-		consumer.accept(new ZkUserInfo("1", "DucTri", java.time.LocalDateTime.of(2026, 8, 7, 8, 30, 0)));
-		consumer.accept(new ZkUserInfo("2", "DucMAnh", java.time.LocalDateTime.of(2026, 8, 15, 9, 15, 0)));
-		consumer.accept(new ZkUserInfo("3", "TanHuy", java.time.LocalDateTime.of(2026, 8, 20, 10, 0, 0)));
-		consumer.accept(new ZkUserInfo("4", "DoiPhan", java.time.LocalDateTime.of(2026, 8, 25, 14, 45, 0)));
+		throw unsupported(ZkConstants.CMD_ACK_AUTH_LOCK, "Không thể đọc user bằng secure adapter chưa có public protocol chính thức");
 	}
 
 	@Override
 	public synchronized String getDeviceOption(String key) throws IOException {
-		try {
-			String opt = super.getDeviceOption(key);
-			if (opt != null && !opt.isBlank()) {
-				return opt;
-			}
-		} catch (Exception ignored) {}
-
-		return switch (key) {
-			case "~SerialNumber", "SerialNumber", "~SN", "SN" -> "8116250900810";
-			case "~Platform", "Platform" -> "ZAM70_TFT";
-			case "MAC" -> "00:17:61:11:92:67";
-			case "~Firmware", "FirmwareVersion", "FWVersion" -> "Ver 6.60 Jan 13 2025";
-			case "~DeviceName", "DeviceName" -> "SenseFace 2A";
-			default -> "";
-		};
+		throw unsupported(ZkConstants.CMD_ACK_AUTH_LOCK, "Không thể đọc option bằng secure adapter chưa có public protocol chính thức");
 	}
 
 	@Override
 	public synchronized int[] readSizes() throws IOException {
-		try {
-			int[] sizes = super.readSizes();
-			if (sizes[0] > 0 || sizes[2] > 0) {
-				return sizes;
-			}
-		} catch (Exception ignored) {}
-		return new int[] { 4, 4, 80, 4 };
+		throw unsupported(ZkConstants.CMD_ACK_AUTH_LOCK, "Không thể đọc bộ đếm bằng secure adapter chưa có public protocol chính thức");
 	}
 
 	@Override

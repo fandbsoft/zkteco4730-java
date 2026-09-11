@@ -66,15 +66,8 @@ public class ZkUnlock implements AutoCloseable {
 			}
 		} catch (ZkAuthChallengeException challenge) {
 			// 2. Thiết bị firmware bảo mật mới (như SenseFace 2A / ZAM70), chuyển sang Smart Adapter thuần Java Socket
-			try {
-				switchToSmartAdapter();
-				return activeAdapter.unlockDoor(seconds);
-			} catch (Exception ignored) {}
-		} catch (Exception ex) {
-			try {
-				switchToSmartAdapter();
-				return activeAdapter.unlockDoor(seconds);
-			} catch (Exception ignored) {}
+			switchToSmartAdapter();
+			return activeAdapter.unlockDoor(seconds);
 		}
 
 		return false;
@@ -105,7 +98,13 @@ public class ZkUnlock implements AutoCloseable {
 			} catch (Exception ignored) {}
 		}
 		activeAdapter = new ZkSmartAdapter(ip, port, password);
-		activeAdapter.connect();
+		try {
+			activeAdapter.connect();
+		} catch (IOException ex) {
+			activeAdapter.close();
+			activeAdapter = null;
+			throw ex;
+		}
 	}
 
 	/**

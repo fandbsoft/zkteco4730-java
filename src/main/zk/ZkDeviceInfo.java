@@ -100,11 +100,8 @@ public class ZkDeviceInfo implements AutoCloseable {
 				fw = "Ver 6.60 Apr 27 2017";
 			}
 			int[] sizes = legacy.readSizes();
-			int uc = (sizes[0] > 0) ? sizes[0] : 2;
-			int fpc = sizes[1];
-			int lc = sizes[2];
-			int facec = sizes[3];
-			return new ZkDeviceInfo(sn, fw, plat, mac, "ZKTeco Standalone " + plat, uc, fpc, facec, lc);
+			return new ZkDeviceInfo(sn, fw, plat, mac, "ZKTeco Standalone " + plat,
+					sizes[0], sizes[1], sizes[3], sizes[2]);
 		} catch (ZkAuthChallengeException challenge) {
 			try (ZkSmartAdapter smart = new ZkSmartAdapter(ip, port, password)) {
 				smart.connect();
@@ -114,31 +111,8 @@ public class ZkDeviceInfo implements AutoCloseable {
 				String fw = smart.getDeviceOption("~Firmware");
 				int[] sizes = smart.readSizes();
 				return new ZkDeviceInfo(sn, fw, plat, mac, "ZKTeco Standalone " + plat, sizes[0], sizes[1], sizes[3], sizes[2]);
-			} catch (Exception ignored) {}
-		} catch (Exception ex) {
-			try (ZkSmartAdapter smart = new ZkSmartAdapter(ip, port, password)) {
-				smart.connect();
-				String sn = smart.getDeviceOption("~SerialNumber");
-				String plat = smart.getDeviceOption("~Platform");
-				String mac = smart.getDeviceOption("MAC");
-				String fw = smart.getDeviceOption("~Firmware");
-				int[] sizes = smart.readSizes();
-				return new ZkDeviceInfo(sn, fw, plat, mac, "ZKTeco Standalone " + plat, sizes[0], sizes[1], sizes[3], sizes[2]);
-			} catch (Exception ignored) {}
+			}
 		}
-
-		// 2. Fallback cấu hình chuẩn của thiết bị
-		return new ZkDeviceInfo(
-			"8116250900810",
-			"Ver 6.60 Jan 13 2025",
-			"ZAM70_TFT",
-			"00:17:61:11:92:67",
-			"ZKTeco Standalone TFT (ZAM70)",
-			4,
-			4,
-			4,
-			80
-		);
 	}
 
 	/**

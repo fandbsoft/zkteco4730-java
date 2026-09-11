@@ -1,12 +1,8 @@
 package main.zk;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
@@ -180,28 +176,11 @@ public class ZkAttendanceLog implements AutoCloseable {
 		try {
 			ensureConnected();
 			activeAdapter.readAttendanceLogs(collector);
-			if (!collected.isEmpty()) {
-				return;
-			}
+			return;
 		} catch (ZkAuthChallengeException challenge) {
 			switchToSmartAdapter();
 			activeAdapter.readAttendanceLogs(collector);
-			if (!collected.isEmpty()) {
-				return;
-			}
-		} catch (Exception ex) {
-			try {
-				switchToSmartAdapter();
-				activeAdapter.readAttendanceLogs(collector);
-				if (!collected.isEmpty()) {
-					return;
-				}
-			} catch (Exception ignored) {}
-		}
-
-		// 2. Fallback bộ dữ liệu kiểm định
-		for (ZkAttendanceLog log : ZkDeviceDataset.loadDataset()) {
-			consumer.accept(log);
+			return;
 		}
 	}
 
@@ -298,8 +277,13 @@ public class ZkAttendanceLog implements AutoCloseable {
 			activeAdapter = null;
 		}
 		ZkSmartAdapter smart = new ZkSmartAdapter(ip, port, password);
-		smart.connect();
-		this.activeAdapter = smart;
+		try {
+			smart.connect();
+			this.activeAdapter = smart;
+		} catch (IOException ex) {
+			smart.close();
+			throw ex;
+		}
 	}
 
 	public synchronized void disableDevice() throws IOException {

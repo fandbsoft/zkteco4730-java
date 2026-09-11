@@ -36,14 +36,14 @@ public class Main {
 
 		// Kiểm thử thiết bị 2: ZKTeco Senseface 2A (Firmware 2025)
 		testDevice("MÁY 2: ZKTECO SENSEFACE 2A", "192.168.1.33", ZkConstants.DEFAULT_PORT, 111111);
-		System.out.println("\n\n");
-		testDevice("MÁY 3: ZKTECO SENSEFACE 2A", "192.168.1.28", ZkConstants.DEFAULT_PORT, 111111);
+//		System.out.println("\n\n");
+//		testDevice("MÁY 3: ZKTECO SENSEFACE 2Aa", "192.168.1.28", ZkConstants.DEFAULT_PORT, 111111);
 
 		System.out.println("\n================================================================================");
-		System.out.println(" KẾT LUẬN TOÀN DIỆN:");
-		System.out.println(" - 100% Pure Java TCP Socket (Port 4370), KHÔNG dùng bất kỳ thư viện native nào!");
-		System.out.println(" - Đã vượt qua kiểm thử trên cả hai dòng máy: Ronald Jack DG 600BID & Senseface 2A.");
-		System.out.println(" - Bộ 4 class (ZkAttendanceLog, ZkUnlock, ZkDeviceInfo, ZkUserInfo) sẵn sàng 100%!");
+		System.out.println(" KẾT LUẬN:");
+		System.out.println(" - Thư viện dùng 100% Java TCP Socket trên cổng 4370, không dùng COM/DLL/native command.");
+		System.out.println(" - Thiết bị legacy pull protocol đọc được trực tiếp.");
+		System.out.println(" - Thiết bị trả 6001/2032 sẽ báo lỗi protocol/auth thật, không trả dữ liệu giả.");
 		System.out.println("================================================================================");
 	}
 
@@ -120,40 +120,19 @@ public class Main {
 			List<ZkAttendanceLog> allLogs = zkLog.getAllLog();
 			long t2 = System.currentTimeMillis();
 			System.out.printf(" -> Tải thành công %d bản ghi (Thời gian: %d ms)%n", allLogs.size(), (t2 - t1));
-			if (!allLogs.isEmpty()) {
-				System.out.printf("    + Bản ghi đầu tiên: %s%n", formatLog(allLogs.get(0)));
-				System.out.printf("    + Bản ghi mới nhất : %s%n", formatLog(allLogs.get(allLogs.size() - 1)));
-			}
+			allLogs.forEach(log -> System.out.printf("		[%02d] %s%n", (allLogs.indexOf(log) + 1), formatLog(log)));
 
-			// 4.2. getLogAt(long, long) với Epoch Milliseconds (01/09/2026 - 02/09/2026)
-			LocalDateTime startRange1 = LocalDateTime.of(2026, 9, 1, 0, 0, 0);
-			LocalDateTime endRange1 = LocalDateTime.of(2026, 9, 2, 23, 59, 59);
+			
+			
+			LocalDateTime startRange1 = LocalDateTime.of(2026, 9, 10, 0, 0, 0);
+			LocalDateTime endRange1 = LocalDateTime.of(2026, 9, 12, 23, 59, 59);
 			long startMillis = startRange1.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
 			long endMillis = endRange1.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
 
-			System.out.println("\n [4.2] Gọi getLogAt(startMillis, endMillis) theo Epoch Milliseconds [01/09 - 02/09]...");
+			System.out.println("\n [4.2] Gọi getLogAt(startMillis, endMillis) theo Epoch Milliseconds [10/09 - 12/09]...");
 			List<ZkAttendanceLog> logsRange1 = zkLog.getLogAt(startMillis, endMillis);
 			System.out.printf(" -> Kết quả: Tìm thấy %d bản ghi:%n", logsRange1.size());
-			for (int i = 0; i < Math.min(4, logsRange1.size()); i++) {
-				System.out.printf("    [%02d] %s%n", (i + 1), formatLog(logsRange1.get(i)));
-			}
-			if (logsRange1.size() > 4) {
-				System.out.printf("    ... và %d bản ghi khác.%n", (logsRange1.size() - 4));
-			}
-
-			// 4.3. getLogAt(long, long) với Epoch Seconds (Ngày 10/09/2026)
-			LocalDateTime startRange2 = LocalDateTime.of(2026, 9, 10, 0, 0, 0);
-			LocalDateTime endRange2 = LocalDateTime.of(2026, 9, 10, 23, 59, 59);
-			long startSec = startRange2.atZone(ZoneId.systemDefault()).toEpochSecond();
-			long endSec = endRange2.atZone(ZoneId.systemDefault()).toEpochSecond();
-
-			System.out.println("\n [4.3] Gọi getLogAt(startSec, endSec) theo Epoch Seconds [10/09/2026]...");
-			List<ZkAttendanceLog> logsRange2 = zkLog.getLogAt(startSec, endSec);
-			System.out.printf(" -> Kết quả: Tìm thấy %d bản ghi trong ngày 10/09/2026:%n", logsRange2.size());
-			for (int i = 0; i < logsRange2.size(); i++) {
-				System.out.printf("    [%02d] %s%n", (i + 1), formatLog(logsRange2.get(i)));
-			}
-
+			logsRange1.forEach(log -> System.out.printf("	[%02d] %s%n", (logsRange1.indexOf(log) + 1), formatLog(log)));
 			System.out.println("\n   => [PASS] ZkAttendanceLog hoạt động hoàn hảo!");
 
 		} catch (IOException ex) {

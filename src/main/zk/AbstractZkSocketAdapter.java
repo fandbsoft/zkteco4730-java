@@ -8,6 +8,7 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.function.Consumer;
 
 /**
@@ -28,6 +29,7 @@ import java.util.function.Consumer;
 public abstract class AbstractZkSocketAdapter implements ZkProtocolAdapter {
 	/** Giới hạn kích thước gói tin an toàn (16MB) */
 	public static final int MAX_PACKET_SIZE = 16 * 1024 * 1024;
+	public static final int MAX_DATA_BUFFER_SIZE = 64 * 1024 * 1024;
 
 	protected final String host;
 	protected final int port;
@@ -138,23 +140,28 @@ public abstract class AbstractZkSocketAdapter implements ZkProtocolAdapter {
 		ZkPacket resp = receivePacket();
 
 		if (resp.isError() || (!resp.isOk() && !resp.isPrepareData() && !resp.isData() && resp.getCommandId() != ZkConstants.CMD_ACK_DATA && resp.getCommandId() != ZkConstants.CMD_DATA)) {
-			return;
+			throw new ZkException("Thiết bị từ chối lệnh chuẩn bị đọc log", resp.getCommandId());
 		}
 
 		byte[] payload = resp.getPayload();
 		if (payload.length < 4) {
-			return;
+			throw new IOException("Phản hồi đọc log không đủ dữ liệu độ dài: " + payload.length);
 		}
 
 		int totalSize = ZkRecordParser.readInt32LE(payload, 0);
 		if (totalSize <= 0) {
 			return;
 		}
+		if (totalSize > MAX_DATA_BUFFER_SIZE) {
+			throw new IOException("Dung lượng dữ liệu thiết bị vượt giới hạn an toàn: " + totalSize + " bytes");
+		}
+
+		int recordSize = ZkRecordParser.detectRecordSize(totalSize);
 
 		if (payload.length > 4) {
 			byte[] directData = new byte[payload.length - 4];
 			System.arraycopy(payload, 4, directData, 0, directData.length);
-			ZkRecordParser.parse(directData, consumer);
+			ZkRecordParser.parseFixedSize(directData, recordSize, consumer);
 			try {
 				sendPacket(ZkConstants.CMD_FREE_DATA, new byte[0]);
 				receivePacket();
@@ -163,6 +170,7 @@ public abstract class AbstractZkSocketAdapter implements ZkProtocolAdapter {
 		}
 
 		int offset = 0;
+		byte[] carry = new byte[0];
 		while (offset < totalSize) {
 			int chunkSize = Math.min(ZkConstants.DEFAULT_BUFFER_CHUNK_SIZE, totalSize - offset);
 			write32LE(chunkParamBuffer, 0, offset);
@@ -172,12 +180,25 @@ public abstract class AbstractZkSocketAdapter implements ZkProtocolAdapter {
 			ZkPacket chunkResp = receivePacket();
 
 			if (chunkResp.getPayloadLength() > 0) {
-				// Parse trực tiếp từng chunk ngay khi nhận, tiết kiệm tối đa RAM
-				ZkRecordParser.parse(chunkResp.getPayload(), consumer);
-				offset += chunkResp.getPayloadLength();
+				byte[] chunk = chunkResp.getPayload();
+				byte[] parseBuffer = new byte[carry.length + chunk.length];
+				System.arraycopy(carry, 0, parseBuffer, 0, carry.length);
+				System.arraycopy(chunk, 0, parseBuffer, carry.length, chunk.length);
+
+				int completeLength = (parseBuffer.length / recordSize) * recordSize;
+				if (completeLength > 0) {
+					ZkRecordParser.parseFixedSize(Arrays.copyOf(parseBuffer, completeLength), recordSize, consumer);
+				}
+				int remaining = parseBuffer.length - completeLength;
+				carry = remaining > 0 ? Arrays.copyOfRange(parseBuffer, completeLength, parseBuffer.length) : new byte[0];
+				offset += chunk.length;
 			} else {
 				break;
 			}
+		}
+
+		if (carry.length > 0) {
+			throw new IOException("Dữ liệu log còn dư " + carry.length + " bytes, không khớp record size " + recordSize);
 		}
 
 		// Giải phóng buffer trên bộ nhớ thiết bị
@@ -198,7 +219,12 @@ public abstract class AbstractZkSocketAdapter implements ZkProtocolAdapter {
 			if (resp.getPayloadLength() > 0) {
 				ZkRecordParser.parse(resp.getPayload(), consumer);
 			}
+			return;
 		}
+		if (resp.isError() || resp.isUnauth()) {
+			throw new ZkException("Thiết bị từ chối đọc log trực tiếp", resp.getCommandId());
+		}
+		throw new ZkException("Phản hồi đọc log trực tiếp không hợp lệ", resp.getCommandId());
 	}
 
 	@Override
@@ -292,7 +318,7 @@ public abstract class AbstractZkSocketAdapter implements ZkProtocolAdapter {
 		if (!connected) {
 			connect();
 		}
-		int delay = Math.max(1, delaySeconds * 10);
+		int delay = Math.max(1, delaySeconds);
 		byte[] payload = new byte[4];
 		payload[0] = (byte) (delay & 0xFF);
 		payload[1] = (byte) ((delay >> 8) & 0xFF);
@@ -324,12 +350,12 @@ public abstract class AbstractZkSocketAdapter implements ZkProtocolAdapter {
 		ZkPacket resp = receivePacket();
 
 		if (resp.isError() || (!resp.isOk() && !resp.isPrepareData() && !resp.isData() && resp.getCommandId() != ZkConstants.CMD_ACK_DATA && resp.getCommandId() != ZkConstants.CMD_DATA)) {
-			return;
+			throw new ZkException("Thiết bị từ chối lệnh chuẩn bị đọc user", resp.getCommandId());
 		}
 
 		byte[] payload = resp.getPayload();
 		if (payload.length < 4) {
-			return;
+			throw new IOException("Phản hồi đọc user không đủ dữ liệu độ dài: " + payload.length);
 		}
 
 		int totalSize = ZkRecordParser.readInt32LE(payload, 0);
@@ -378,8 +404,7 @@ public abstract class AbstractZkSocketAdapter implements ZkProtocolAdapter {
 				pin = String.valueOf(uid);
 			}
 			if (!pin.isEmpty()) {
-				LocalDateTime created = LocalDateTime.of(2026, 8, 1 + (i % 28), 8, 0, 0);
-				consumer.accept(new ZkUserInfo(pin, name, created));
+				consumer.accept(new ZkUserInfo(pin, name, null));
 			}
 		}
 
@@ -407,7 +432,8 @@ public abstract class AbstractZkSocketAdapter implements ZkProtocolAdapter {
 			}
 			return new int[] { userCount, fpCount, logCount, faceCount };
 		}
-		return new int[] { 0, 0, 0, 0 };
+		throw new IOException("Phản hồi bộ đếm thiết bị không hợp lệ: cmd=" + resp.getCommandId()
+				+ ", payloadLen=" + resp.getPayloadLength());
 	}
 
 	private static String readNullTerminatedString(byte[] data, int offset, int maxLen, java.nio.charset.Charset charset) {
