@@ -36,6 +36,8 @@ public class Main {
 
 		// Kiểm thử thiết bị 2: ZKTeco Senseface 2A (Firmware 2025)
 		testDevice("MÁY 2: ZKTECO SENSEFACE 2A", "192.168.1.33", ZkConstants.DEFAULT_PORT, 111111);
+		System.out.println("\n\n");
+		testDevice("MÁY 3: ZKTECO SENSEFACE 2A", "192.168.1.28", ZkConstants.DEFAULT_PORT, 111111);
 
 		System.out.println("\n================================================================================");
 		System.out.println(" KẾT LUẬN TOÀN DIỆN:");

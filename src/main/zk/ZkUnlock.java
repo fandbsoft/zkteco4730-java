@@ -24,7 +24,7 @@ public class ZkUnlock implements AutoCloseable {
 	private final int password;
 	private final int machineNumber;
 
-	private ZkLegacySocketAdapter legacyAdapter;
+	private ZkProtocolAdapter activeAdapter;
 
 	public ZkUnlock(String ip, int port, int password, int machineNumber) {
 		if (ip == null || ip.isBlank()) {
@@ -49,7 +49,7 @@ public class ZkUnlock implements AutoCloseable {
 	}
 
 	/**
-	 * Mở cửa với thời gian delay tính bằng giây.
+	 * Mở cửa với thời gian delay tính bằng giây qua Pure Java TCP Socket.
 	 *
 	 * @param delaySeconds Số giây mở relay (ví dụ: 5s, 10s).
 	 * @return true nếu lệnh mở cửa được thiết bị chấp thuận và thực thi.
@@ -58,66 +58,54 @@ public class ZkUnlock implements AutoCloseable {
 	public synchronized boolean unlock(int delaySeconds) throws IOException {
 		int seconds = Math.max(1, delaySeconds);
 
-		// 1. Thử gửi lệnh qua TCP Socket thuần Java (Pure Java Socket)
+		// 1. Thử gửi lệnh qua ZkLegacySocketAdapter (Pure Java Raw Socket)
 		try {
-			if (legacyAdapter == null || !legacyAdapter.isConnected()) {
-				legacyAdapter = new ZkLegacySocketAdapter(ip, port, password);
-				legacyAdapter.connect();
-			}
-
-			if (legacyAdapter.unlockDoor(seconds)) {
+			ensureConnected();
+			if (activeAdapter.unlockDoor(seconds)) {
 				return true;
 			}
-		} catch (Exception ignored) {
-		} finally {
-			if (legacyAdapter != null) {
-				try {
-					legacyAdapter.close();
-				} catch (Exception ignored) {}
-				legacyAdapter = null;
-			}
-		}
-
-		// 2. Kích hoạt mở cửa kiểm soát ra vào (Access Control) cho dòng Senseface 2A / ZAM70
-		int[] machineNumbersToTry = (machineNumber == 104 || (ip != null && ip.endsWith(".33")))
-				? new int[] { 104, 1, 0 }
-				: new int[] { machineNumber, 104, 1, 0 };
-
-		for (int mNo : machineNumbersToTry) {
-			if (executeNativeUnlock(ip, port, password, mNo, seconds)) {
-				return true;
-			}
+		} catch (ZkAuthChallengeException challenge) {
+			// 2. Thiết bị firmware bảo mật mới (như SenseFace 2A / ZAM70), chuyển sang Smart Adapter thuần Java Socket
+			try {
+				switchToSmartAdapter();
+				return activeAdapter.unlockDoor(seconds);
+			} catch (Exception ignored) {}
+		} catch (Exception ex) {
+			try {
+				switchToSmartAdapter();
+				return activeAdapter.unlockDoor(seconds);
+			} catch (Exception ignored) {}
 		}
 
 		return false;
 	}
 
-	private static boolean executeNativeUnlock(String host, int port, int pwd, int machNo, int delaySec) {
-		try {
-			String os = System.getProperty("os.name", "").toLowerCase();
-			if (!os.contains("win")) {
-				return false;
-			}
-			int mNo = (machNo > 0) ? machNo : 104;
-			String script = String.format(
-				"$zk = New-Object -ComObject zkemkeeper.ZKEM.1; [void]$zk.SetCommPassword(%d); " +
-				"if ($zk.Connect_Net('%s', %d)) { $res = $zk.ACUnlock(%d, %d); [void]$zk.Disconnect(); if ($res) { exit 0 } else { exit 1 } } else { exit 2 }",
-				pwd, host, port, mNo, delaySec
-			);
-
-			String psPath = "C:\\Windows\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe";
-			if (!new java.io.File(psPath).exists()) {
-				psPath = "powershell.exe";
-			}
-
-			ProcessBuilder pb = new ProcessBuilder(psPath, "-ExecutionPolicy", "Bypass", "-Command", script);
-			pb.redirectErrorStream(true);
-			Process p = pb.start();
-			int code = p.waitFor();
-			return (code == 0);
-		} catch (Exception e) {
-			return false;
+	private synchronized void ensureConnected() throws IOException {
+		if (activeAdapter != null && activeAdapter.isConnected()) {
+			return;
 		}
+		if (activeAdapter != null) {
+			try {
+				activeAdapter.close();
+			} catch (Exception ignored) {}
+		}
+
+		activeAdapter = new ZkLegacySocketAdapter(ip, port, password);
+		try {
+			activeAdapter.connect();
+		} catch (ZkAuthChallengeException e) {
+			switchToSmartAdapter();
+		}
+	}
+
+	private synchronized void switchToSmartAdapter() throws IOException {
+		if (activeAdapter != null) {
+			try {
+				activeAdapter.close();
+			} catch (Exception ignored) {}
+		}
+		activeAdapter = new ZkSmartAdapter(ip, port, password);
+		activeAdapter.connect();
 	}
 
 	/**
@@ -140,11 +128,11 @@ public class ZkUnlock implements AutoCloseable {
 
 	@Override
 	public synchronized void close() {
-		if (legacyAdapter != null) {
+		if (activeAdapter != null) {
 			try {
-				legacyAdapter.close();
+				activeAdapter.close();
 			} catch (Exception ignored) {}
-			legacyAdapter = null;
+			activeAdapter = null;
 		}
 	}
 }
