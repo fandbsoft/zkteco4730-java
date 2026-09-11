@@ -58,7 +58,7 @@ public class ZkUnlock implements AutoCloseable {
 	public synchronized boolean unlock(int delaySeconds) throws IOException {
 		int seconds = Math.max(1, delaySeconds);
 
-		// 1. Thử gửi lệnh qua TCP Socket thuần Java
+		// 1. Thử gửi lệnh qua TCP Socket thuần Java (Pure Java Socket)
 		try {
 			if (legacyAdapter == null || !legacyAdapter.isConnected()) {
 				legacyAdapter = new ZkLegacySocketAdapter(ip, port, password);
@@ -68,16 +68,7 @@ public class ZkUnlock implements AutoCloseable {
 			if (legacyAdapter.unlockDoor(seconds)) {
 				return true;
 			}
-		} catch (ZkAuthChallengeException challenge) {
-			try (ZkSmartAdapter smart = new ZkSmartAdapter(ip, port, password)) {
-				smart.connect();
-				return smart.unlockDoor(seconds);
-			} catch (Exception ignored) {}
-		} catch (Exception ex) {
-			try (ZkSmartAdapter smart = new ZkSmartAdapter(ip, port, password)) {
-				smart.connect();
-				return smart.unlockDoor(seconds);
-			} catch (Exception ignored) {}
+		} catch (Exception ignored) {
 		} finally {
 			if (legacyAdapter != null) {
 				try {
@@ -87,7 +78,46 @@ public class ZkUnlock implements AutoCloseable {
 			}
 		}
 
-		return true;
+		// 2. Kích hoạt mở cửa kiểm soát ra vào (Access Control) cho dòng Senseface 2A / ZAM70
+		int[] machineNumbersToTry = (machineNumber == 104 || (ip != null && ip.endsWith(".33")))
+				? new int[] { 104, 1, 0 }
+				: new int[] { machineNumber, 104, 1, 0 };
+
+		for (int mNo : machineNumbersToTry) {
+			if (executeNativeUnlock(ip, port, password, mNo, seconds)) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	private static boolean executeNativeUnlock(String host, int port, int pwd, int machNo, int delaySec) {
+		try {
+			String os = System.getProperty("os.name", "").toLowerCase();
+			if (!os.contains("win")) {
+				return false;
+			}
+			int mNo = (machNo > 0) ? machNo : 104;
+			String script = String.format(
+				"$zk = New-Object -ComObject zkemkeeper.ZKEM.1; [void]$zk.SetCommPassword(%d); " +
+				"if ($zk.Connect_Net('%s', %d)) { $res = $zk.ACUnlock(%d, %d); [void]$zk.Disconnect(); if ($res) { exit 0 } else { exit 1 } } else { exit 2 }",
+				pwd, host, port, mNo, delaySec
+			);
+
+			String psPath = "C:\\Windows\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe";
+			if (!new java.io.File(psPath).exists()) {
+				psPath = "powershell.exe";
+			}
+
+			ProcessBuilder pb = new ProcessBuilder(psPath, "-ExecutionPolicy", "Bypass", "-Command", script);
+			pb.redirectErrorStream(true);
+			Process p = pb.start();
+			int code = p.waitFor();
+			return (code == 0);
+		} catch (Exception e) {
+			return false;
+		}
 	}
 
 	/**
