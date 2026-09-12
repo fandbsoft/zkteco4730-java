@@ -42,6 +42,7 @@ public class ZkClient implements AutoCloseable {
 	private boolean closed = true;
 	private ProtocolMode protocolMode = ProtocolMode.UNKNOWN;
 	private List<AttendanceLog> attendanceLogCache;
+	private boolean bulkReadSinceConnect;
 
 	public ZkClient(String host, int port, int password) {
 		this(host, port, password, ZkConstants.DEFAULT_CONNECT_TIMEOUT_MS, ZkConstants.DEFAULT_READ_TIMEOUT_MS);
@@ -188,25 +189,13 @@ public class ZkClient implements AutoCloseable {
 
 	public synchronized boolean unlock(int delaySeconds) throws IOException {
 		ensureConnected();
-		IOException firstFailure = null;
-		try {
-			if (unlockOnce(delaySeconds)) {
-				return true;
-			}
-		} catch (IOException ex) {
-			firstFailure = ex;
+		if (protocolMode == ProtocolMode.SECURE_PULL && bulkReadSinceConnect) {
+			List<AttendanceLog> cachedLogs = attendanceLogCache;
+			close();
+			connect();
+			attendanceLogCache = cachedLogs;
 		}
-
-		close();
-		connect();
-		try {
-			return unlockOnce(delaySeconds);
-		} catch (IOException retryFailure) {
-			if (firstFailure != null) {
-				retryFailure.addSuppressed(firstFailure);
-			}
-			throw retryFailure;
-		}
+		return unlockOnce(delaySeconds);
 	}
 
 	private boolean unlockOnce(int delaySeconds) throws IOException {
@@ -283,6 +272,7 @@ public class ZkClient implements AutoCloseable {
 		this.aesKey = null;
 		this.protocolMode = ProtocolMode.UNKNOWN;
 		this.attendanceLogCache = null;
+		this.bulkReadSinceConnect = false;
 		this.sessionId = 0;
 		this.replyId = 0;
 
@@ -411,9 +401,11 @@ public class ZkClient implements AutoCloseable {
 		byte[] payload = response.getPayload();
 		if (response.isData()) {
 			freeDeviceDataBuffer();
+			bulkReadSinceConnect = true;
 			return payload;
 		}
 		if (payload.length == 0) {
+			bulkReadSinceConnect = true;
 			return new byte[0];
 		}
 		if (payload.length < 4) {
@@ -456,6 +448,7 @@ public class ZkClient implements AutoCloseable {
 			offset += chunk.length;
 		}
 		freeDeviceDataBuffer();
+		bulkReadSinceConnect = true;
 		return allData.toByteArray();
 	}
 

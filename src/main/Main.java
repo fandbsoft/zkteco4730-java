@@ -27,9 +27,9 @@ public class Main {
 		} else {
 //			testDevice("MAY 1: RONALD JACK DG 600BID", "192.168.1.39", ZkConstants.DEFAULT_PORT, 111111);
 			System.out.println("\n\n");
-//			testDevice("MAY 2: ZKTECO SENSEFACE 2A", "192.168.1.33", ZkConstants.DEFAULT_PORT, 111111);
+			testDevice("MAY 2: ZKTECO SENSEFACE 2A", "192.168.1.33", ZkConstants.DEFAULT_PORT, 111111);
 			System.out.println("\n\n");
-			testDevice("MAY 3: ZKTECO SENSEFACE 2Aa", "192.168.1.28", ZkConstants.DEFAULT_PORT, 111111);
+//			testDevice("MAY 3: ZKTECO SENSEFACE 2Aa", "192.168.1.28", ZkConstants.DEFAULT_PORT, 111111);
 		}
 
 		System.out.println("\n================================================================================");
