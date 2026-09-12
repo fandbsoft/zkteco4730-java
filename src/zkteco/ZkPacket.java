@@ -15,11 +15,15 @@ final class ZkPacket {
 	}
 
 	ZkPacket(int commandId, int checksum, int sessionId, int replyId, byte[] payload) {
+		this(commandId, checksum, sessionId, replyId, payload, false);
+	}
+
+	private ZkPacket(int commandId, int checksum, int sessionId, int replyId, byte[] payload, boolean trustedPayload) {
 		this.commandId = commandId & 0xFFFF;
 		this.checksum = checksum & 0xFFFF;
 		this.sessionId = sessionId & 0xFFFF;
 		this.replyId = replyId & 0xFFFF;
-		this.payload = payload != null ? payload.clone() : new byte[0];
+		this.payload = payload == null ? new byte[0] : (trustedPayload ? payload : payload.clone());
 	}
 
 	int getCommandId() { return commandId; }
@@ -27,6 +31,7 @@ final class ZkPacket {
 	int getSessionId() { return sessionId; }
 	int getReplyId() { return replyId; }
 	byte[] getPayload() { return payload.clone(); }
+	byte[] payloadView() { return payload; }
 	int getPayloadLength() { return payload.length; }
 
 	boolean isOk() { return commandId == ZkConstants.CMD_ACK_OK; }
@@ -89,7 +94,7 @@ final class ZkPacket {
 		if (payloadLength > 0) {
 			System.arraycopy(raw, offset + ZkConstants.ZK_HEADER_SIZE, payload, 0, payloadLength);
 		}
-		return new ZkPacket(cmd, chk, sess, reply, payload);
+		return new ZkPacket(cmd, chk, sess, reply, payload, true);
 	}
 
 	private static int calculateChecksum(byte[] data) {

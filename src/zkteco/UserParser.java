@@ -2,8 +2,10 @@ package zkteco;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Consumer;
 
 final class UserParser {
 	private UserParser() {}
@@ -32,10 +34,152 @@ final class UserParser {
 		return users;
 	}
 
+	static StreamingParser newStreamingParser(Consumer<UserInfo> consumer) {
+		return new StreamingParser(consumer);
+	}
+
+	static final class StreamingParser {
+		private static final byte[] EMPTY = new byte[0];
+
+		private final Consumer<UserInfo> consumer;
+		private byte[] pending = EMPTY;
+		private int totalBytes;
+		private int recordSize;
+		private boolean initialized;
+
+		private StreamingParser(Consumer<UserInfo> consumer) {
+			if (consumer == null) {
+				throw new IllegalArgumentException("User consumer must not be null");
+			}
+			this.consumer = consumer;
+		}
+
+		void start(int totalBytes) {
+			this.totalBytes = Math.max(0, totalBytes);
+			this.pending = EMPTY;
+			this.recordSize = 0;
+			this.initialized = false;
+		}
+
+		void accept(byte[] data, int offset, int length) {
+			if (data == null || length <= 0) {
+				return;
+			}
+			if (!initialized) {
+				append(data, offset, length);
+				if (initialize(false)) {
+					parsePendingRecords();
+				}
+				return;
+			}
+			parseChunk(data, offset, length);
+		}
+
+		void finish() {
+			if (!initialized && initialize(true)) {
+				parsePendingRecords();
+			}
+			pending = EMPTY;
+		}
+
+		private boolean initialize(boolean finishing) {
+			if (initialized) {
+				return true;
+			}
+			if (totalBytes < 28) {
+				initialized = true;
+				return true;
+			}
+			if (pending.length < 4 && !finishing) {
+				return false;
+			}
+
+			int startOffset = detectStartOffset(pending, totalBytes);
+			int dataBytes = Math.max(0, totalBytes - startOffset);
+			recordSize = detectRecordSize(dataBytes);
+			if (pending.length < startOffset && !finishing) {
+				return false;
+			}
+			if (startOffset > 0) {
+				pending = pending.length > startOffset
+						? Arrays.copyOfRange(pending, startOffset, pending.length)
+						: EMPTY;
+			}
+			initialized = true;
+			return true;
+		}
+
+		private static int detectStartOffset(byte[] firstBytes, int totalBytes) {
+			if (firstBytes.length < 4 || totalBytes < 32) {
+				return 0;
+			}
+			long header = Integer.toUnsignedLong(RecordParser.readInt32LE(firstBytes, 0));
+			long remaining = totalBytes - 4L;
+			if (header > 0 && header <= remaining && (header % 72 == 0 || header % 28 == 0)) {
+				return 4;
+			}
+			return 0;
+		}
+
+		private void append(byte[] data, int offset, int length) {
+			if (length <= 0) {
+				return;
+			}
+			int current = pending.length;
+			byte[] combined = Arrays.copyOf(pending, current + length);
+			System.arraycopy(data, offset, combined, current, length);
+			pending = combined;
+		}
+
+		private void parsePendingRecords() {
+			if (recordSize <= 0 || pending.length < recordSize) {
+				return;
+			}
+			int parseBytes = (pending.length / recordSize) * recordSize;
+			for (int offset = 0; offset < parseBytes; offset += recordSize) {
+				UserInfo user = recordSize == 72 ? parseRecord72(pending, offset) : parseRecord28(pending, offset);
+				if (user != null && !user.getUserId().isEmpty()) {
+					consumer.accept(user);
+				}
+			}
+			pending = pending.length > parseBytes
+					? Arrays.copyOfRange(pending, parseBytes, pending.length)
+					: EMPTY;
+		}
+
+		private void parseChunk(byte[] data, int offset, int length) {
+			if (recordSize <= 0) {
+				return;
+			}
+			int cursor = offset;
+			int remaining = length;
+			if (pending.length > 0) {
+				int needed = recordSize - pending.length;
+				int taken = Math.min(needed, remaining);
+				append(data, cursor, taken);
+				cursor += taken;
+				remaining -= taken;
+				parsePendingRecords();
+			}
+			int parseBytes = (remaining / recordSize) * recordSize;
+			for (int current = cursor; current < cursor + parseBytes; current += recordSize) {
+				UserInfo user = recordSize == 72 ? parseRecord72(data, current) : parseRecord28(data, current);
+				if (user != null && !user.getUserId().isEmpty()) {
+					consumer.accept(user);
+				}
+			}
+			int tailOffset = cursor + parseBytes;
+			int tailLength = remaining - parseBytes;
+			if (tailLength > 0) {
+				pending = Arrays.copyOfRange(data, tailOffset, tailOffset + tailLength);
+			}
+		}
+	}
+
 	private static int detectStartOffset(byte[] rawData) {
 		if (rawData.length >= 32) {
-			int header = RecordParser.readInt32LE(rawData, 0);
-			int remaining = rawData.length - 4;
+			long header = Integer.toUnsignedLong(RecordParser.readInt32LE(rawData, 0));
+			long remaining = rawData.length - 4L;
 			if (header > 0 && header <= remaining && (header % 72 == 0 || header % 28 == 0)) {
 				return 4;
 			}

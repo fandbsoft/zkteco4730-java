@@ -63,5 +63,14 @@ public final class ZkConstants {
 	public static final int TCP_HEADER_SIZE = 8;
 	public static final int ZK_HEADER_SIZE = 8;
 	public static final int DEFAULT_BUFFER_CHUNK_SIZE = 16 * 1024;
-	public static final int MAX_PACKET_SIZE = 16 * 1024 * 1024;
+	public static final int MAX_FRAME_PAYLOAD_SIZE = 16 * 1024 * 1024;
+	public static final int MAX_BULK_TRANSFER_SIZE = 128 * 1024 * 1024;
+
+	/**
+	 * Kept for source compatibility with earlier builds. Use
+	 * {@link #MAX_FRAME_PAYLOAD_SIZE} for one TCP frame and
+	 * {@link #MAX_BULK_TRANSFER_SIZE} for prepared-buffer transfers.
+	 */
+	@Deprecated
+	public static final int MAX_PACKET_SIZE = MAX_FRAME_PAYLOAD_SIZE;
 }

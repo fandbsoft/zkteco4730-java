@@ -1,6 +1,5 @@
 package zkteco;
 
-import java.io.ByteArrayOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -12,9 +11,12 @@ import java.security.KeyPair;
 import java.security.interfaces.RSAPublicKey;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.function.Consumer;
 
 /**
  * Production-ready pure Java client for ZKTeco standalone devices over TCP 4370.
@@ -42,6 +44,7 @@ public class ZkClient implements AutoCloseable {
 	private boolean closed = true;
 	private ProtocolMode protocolMode = ProtocolMode.UNKNOWN;
 	private List<AttendanceLog> attendanceLogCache;
+	private boolean attendanceLogCacheEnabled;
 	private boolean bulkReadSinceConnect;
 
 	public ZkClient(String host, int port, int password) {
@@ -125,14 +128,24 @@ public class ZkClient implements AutoCloseable {
 
 	public synchronized List<UserInfo> getAllUser() throws IOException {
 		ensureConnected();
-		byte[] request = new byte[] {
-				1,
-				(byte) (ZkConstants.CMD_USERTEMP_RRQ & 0xFF),
-				(byte) ((ZkConstants.CMD_USERTEMP_RRQ >>> 8) & 0xFF),
-				(byte) ZkConstants.FCT_USER,
-				0, 0, 0, 0, 0, 0, 0
-		};
-		List<UserInfo> users = UserParser.parse(readBufferedPayload(request, "users"));
+		List<UserInfo> users = new ArrayList<>();
+		UserParser.StreamingParser parser = UserParser.newStreamingParser(users::add);
+		streamBufferedPayload(buildUserRequest(), "users", new PayloadHandler() {
+			@Override
+			public void onStart(int totalSize) {
+				parser.start(totalSize);
+			}
+
+			@Override
+			public void onChunk(byte[] data, int offset, int length) {
+				parser.accept(data, offset, length);
+			}
+
+			@Override
+			public void onFinish() {
+				parser.finish();
+			}
+		});
 		return enrichUserCreatedAt(users);
 	}
 
@@ -154,16 +167,14 @@ public class ZkClient implements AutoCloseable {
 	}
 
 	public synchronized List<AttendanceLog> getAllLog() throws IOException {
-		if (attendanceLogCache != null) {
+		if (attendanceLogCacheEnabled && attendanceLogCache != null) {
 			return new ArrayList<>(attendanceLogCache);
 		}
-		ensureConnected();
-		byte[] request = new byte[11];
-		request[0] = 1;
-		request[1] = (byte) (ZkConstants.CMD_ATTLOG_RRQ & 0xFF);
-		request[2] = (byte) ((ZkConstants.CMD_ATTLOG_RRQ >>> 8) & 0xFF);
-		List<AttendanceLog> logs = RecordParser.parse(readBufferedPayload(request, "attendance logs"));
-		attendanceLogCache = new ArrayList<>(logs);
+		List<AttendanceLog> logs = new ArrayList<>();
+		streamAllLog(logs::add);
+		if (attendanceLogCacheEnabled) {
+			attendanceLogCache = new ArrayList<>(logs);
+		}
 		return logs;
 	}
 
@@ -172,28 +183,68 @@ public class ZkClient implements AutoCloseable {
 	}
 
 	public synchronized List<AttendanceLog> getLogAt(long start, long end) throws IOException {
+		if (attendanceLogCacheEnabled && attendanceLogCache != null) {
+			long startMillis = start <= 0 ? Long.MIN_VALUE : toEpochMillis(start);
+			long endMillis = end <= 0 ? Long.MAX_VALUE : toEpochMillis(end);
+			long min = Math.min(startMillis, endMillis);
+			long max = Math.max(startMillis, endMillis);
+
+			List<AttendanceLog> result = new ArrayList<>();
+			for (AttendanceLog log : attendanceLogCache) {
+				long timestamp = log.getTimestampEpochMilli();
+				if (timestamp > 0 && timestamp >= min && timestamp <= max) {
+					result.add(log);
+				}
+			}
+			return result;
+		}
+
+		List<AttendanceLog> result = new ArrayList<>();
+		streamLogAt(start, end, result::add);
+		return result;
+	}
+
+	public synchronized void streamAllLog(Consumer<AttendanceLog> consumer) throws IOException {
+		Objects.requireNonNull(consumer, "Attendance log consumer must not be null");
+		ensureConnected();
+		RecordParser.StreamingParser parser = RecordParser.newStreamingParser(consumer);
+		streamBufferedPayload(buildAttendanceLogRequest(), "attendance logs", new PayloadHandler() {
+			@Override
+			public void onStart(int totalSize) {
+				parser.start(totalSize);
+			}
+
+			@Override
+			public void onChunk(byte[] data, int offset, int length) {
+				parser.accept(data, offset, length);
+			}
+
+			@Override
+			public void onFinish() {
+				parser.finish();
+			}
+		});
+	}
+
+	public synchronized void streamLogAt(long start, long end, Consumer<AttendanceLog> consumer) throws IOException {
+		Objects.requireNonNull(consumer, "Attendance log consumer must not be null");
 		long startMillis = start <= 0 ? Long.MIN_VALUE : toEpochMillis(start);
 		long endMillis = end <= 0 ? Long.MAX_VALUE : toEpochMillis(end);
 		long min = Math.min(startMillis, endMillis);
 		long max = Math.max(startMillis, endMillis);
 
-		List<AttendanceLog> result = new ArrayList<>();
-		for (AttendanceLog log : getAllLog()) {
+		streamAllLog(log -> {
 			long timestamp = log.getTimestampEpochMilli();
 			if (timestamp > 0 && timestamp >= min && timestamp <= max) {
-				result.add(log);
+				consumer.accept(log);
 			}
-		}
-		return result;
+		});
 	}
 
 	public synchronized boolean unlock(int delaySeconds) throws IOException {
 		ensureConnected();
 		if (protocolMode == ProtocolMode.SECURE_PULL && bulkReadSinceConnect) {
-			List<AttendanceLog> cachedLogs = attendanceLogCache;
-			close();
-			connect();
-			attendanceLogCache = cachedLogs;
+			reconnectPreservingCache();
 		}
 		return unlockOnce(delaySeconds);
 	}
@@ -223,7 +274,7 @@ public class ZkClient implements AutoCloseable {
 		if (response.getPayloadLength() == 0) {
 			return "";
 		}
-		String text = new String(response.getPayload(), StandardCharsets.US_ASCII)
+		String text = new String(response.payloadView(), StandardCharsets.US_ASCII)
 				.replace("\0", "")
 				.trim();
 		int equals = text.indexOf('=');
@@ -235,13 +286,25 @@ public class ZkClient implements AutoCloseable {
 		sendPacket(ZkConstants.CMD_VERSION, new byte[0]);
 		ZkPacket response = receivePacket();
 		if (response.getPayloadLength() > 0 && (response.isOk() || response.isData())) {
-			return new String(response.getPayload(), StandardCharsets.US_ASCII).replace("\0", "").trim();
+			return new String(response.payloadView(), StandardCharsets.US_ASCII).replace("\0", "").trim();
 		}
 		return "";
 	}
 
 	public synchronized void clearCache() {
 		attendanceLogCache = null;
+	}
+
+	public synchronized boolean isAttendanceLogCacheEnabled() {
+		return attendanceLogCacheEnabled;
+	}
+
+	public synchronized ZkClient setAttendanceLogCacheEnabled(boolean enabled) {
+		this.attendanceLogCacheEnabled = enabled;
+		if (!enabled) {
+			clearCache();
+		}
+		return this;
 	}
 
 	public boolean isConnected() {
@@ -312,7 +375,7 @@ public class ZkClient implements AutoCloseable {
 			if (!publicKeyResponse.isOk()) {
 				throw new ZkException("Secure public-key exchange failed", publicKeyResponse.getCommandId());
 			}
-			ZkCrypto.DmcMessage deviceKeyMessage = ZkCrypto.parseDmcPayload(publicKeyResponse.getPayload());
+			ZkCrypto.DmcMessage deviceKeyMessage = ZkCrypto.parseDmcPayload(publicKeyResponse.payloadView());
 			String devicePem = new String(deviceKeyMessage.getBody(), StandardCharsets.US_ASCII);
 			RSAPublicKey devicePublicKey = ZkCrypto.parsePkcs1PublicPem(devicePem);
 
@@ -325,7 +388,7 @@ public class ZkClient implements AutoCloseable {
 				throw new ZkException("Secure session-key exchange failed", secretResponse.getCommandId());
 			}
 			ZkCrypto.DmcMessage serverSecretMessage = ZkCrypto.parseRsaEncryptedDmcPayload(
-					secretResponse.getPayload(), clientKeyPair.getPrivate());
+					secretResponse.payloadView(), clientKeyPair.getPrivate());
 			byte[] serverSecretBytes = serverSecretMessage.getBody();
 			if (serverSecretBytes.length < 4) {
 				throw new ZkException("Secure session-key response is too short");
@@ -379,7 +442,7 @@ public class ZkClient implements AutoCloseable {
 	private int[] readSizes() throws IOException {
 		sendPacket(ZkConstants.CMD_GET_FREE_SIZES, new byte[0]);
 		ZkPacket response = receivePacket();
-		byte[] payload = response.getPayload();
+		byte[] payload = response.payloadView();
 		if (payload.length < 80) {
 			throw new ZkException("Invalid device size response", response.getCommandId());
 		}
@@ -390,66 +453,113 @@ public class ZkClient implements AutoCloseable {
 		return new int[] { users, fingers, logs, faces };
 	}
 
-	private byte[] readBufferedPayload(byte[] request, String label) throws IOException {
+	private interface PayloadHandler {
+		void onStart(int totalSize) throws IOException;
+		void onChunk(byte[] data, int offset, int length) throws IOException;
+		void onFinish() throws IOException;
+	}
+
+	private void streamBufferedPayload(byte[] request, String label, PayloadHandler handler) throws IOException {
+		Objects.requireNonNull(handler, "Payload handler must not be null");
+		ensureBulkReadReady();
 		freeDeviceDataBuffer();
-		sendPacket(ZkConstants.CMD_DATA_WRRQ, request);
-		ZkPacket response = receivePacket();
-		if (response.isError() || response.isUnauth() || response.isAuthLock()) {
-			throw new ZkException("Device rejected " + label + " read", response.getCommandId());
-		}
+		boolean releaseDeviceBuffer = false;
+		try {
+			sendPacket(ZkConstants.CMD_DATA_WRRQ, request);
+			releaseDeviceBuffer = true;
+			ZkPacket response = receivePacket();
+			if (response.isError() || response.isUnauth() || response.isAuthLock()) {
+				throw new ZkException("Device rejected " + label + " read", response.getCommandId());
+			}
 
-		byte[] payload = response.getPayload();
-		if (response.isData()) {
-			freeDeviceDataBuffer();
-			bulkReadSinceConnect = true;
-			return payload;
-		}
-		if (payload.length == 0) {
-			bulkReadSinceConnect = true;
-			return new byte[0];
-		}
-		if (payload.length < 4) {
-			throw new IOException("Invalid " + label + " prepared-buffer descriptor length: " + payload.length);
-		}
+			byte[] payload = response.payloadView();
+			if (response.isData()) {
+				validateBulkPayloadSize(label, payload.length);
+				handler.onStart(payload.length);
+				if (payload.length > 0) {
+					handler.onChunk(payload, 0, payload.length);
+				}
+				handler.onFinish();
+				return;
+			}
+			if (payload.length == 0) {
+				handler.onStart(0);
+				handler.onFinish();
+				return;
+			}
+			if (payload.length < 4) {
+				throw new IOException("Invalid " + label + " prepared-buffer descriptor length: " + payload.length);
+			}
 
-		int totalSize = extractPreparedBufferSize(payload);
-		if (totalSize <= 0) {
-			return new byte[0];
+			int totalSize = extractPreparedBufferSize(payload);
+			validateBulkPayloadSize(label, totalSize);
+			handler.onStart(Math.max(0, totalSize));
+			if (totalSize <= 0) {
+				handler.onFinish();
+				return;
+			}
+
+			int offset = 0;
+			int prepareSkips = 0;
+			while (offset < totalSize) {
+				int chunkSize = Math.min(ZkConstants.DEFAULT_BUFFER_CHUNK_SIZE, totalSize - offset);
+				byte[] chunkRequest = new byte[8];
+				writeInt32LE(chunkRequest, 0, offset);
+				writeInt32LE(chunkRequest, 4, chunkSize);
+				sendPacket(ZkConstants.CMD_READ_BUFFER, chunkRequest);
+				ZkPacket chunkResponse = receivePacket();
+				if (chunkResponse.isError() || chunkResponse.isUnauth() || chunkResponse.isAuthLock()) {
+					throw new ZkException("Device rejected " + label + " buffer chunk", chunkResponse.getCommandId());
+				}
+				if (chunkResponse.isPrepareData()) {
+					if (++prepareSkips > 3) {
+						throw new IOException("Device repeatedly returned prepare marker while reading " + label);
+					}
+					continue;
+				}
+				prepareSkips = 0;
+				byte[] chunk = chunkResponse.payloadView();
+				if (chunk.length == 0) {
+					throw new EOFException("Device ended " + label + " buffer at " + offset + " / " + totalSize + " bytes");
+				}
+				int bytesToConsume = Math.min(chunk.length, totalSize - offset);
+				handler.onChunk(chunk, 0, bytesToConsume);
+				offset += bytesToConsume;
+			}
+			handler.onFinish();
+		} finally {
+			if (releaseDeviceBuffer) {
+				bulkReadSinceConnect = true;
+				freeDeviceDataBuffer();
+			}
 		}
-		if (totalSize > ZkConstants.MAX_PACKET_SIZE) {
+	}
+
+	private static byte[] buildUserRequest() {
+		return new byte[] {
+				1,
+				(byte) (ZkConstants.CMD_USERTEMP_RRQ & 0xFF),
+				(byte) ((ZkConstants.CMD_USERTEMP_RRQ >>> 8) & 0xFF),
+				(byte) ZkConstants.FCT_USER,
+				0, 0, 0, 0, 0, 0, 0
+		};
+	}
+
+	private static byte[] buildAttendanceLogRequest() {
+		byte[] request = new byte[11];
+		request[0] = 1;
+		request[1] = (byte) (ZkConstants.CMD_ATTLOG_RRQ & 0xFF);
+		request[2] = (byte) ((ZkConstants.CMD_ATTLOG_RRQ >>> 8) & 0xFF);
+		return request;
+	}
+
+	private static void validateBulkPayloadSize(String label, int totalSize) throws IOException {
+		if (totalSize < 0) {
+			throw new IOException("Invalid " + label + " payload size: " + totalSize);
+		}
+		if (totalSize > ZkConstants.MAX_BULK_TRANSFER_SIZE) {
 			throw new IOException("Refusing oversized " + label + " payload: " + totalSize + " bytes");
 		}
-
-		ByteArrayOutputStream allData = new ByteArrayOutputStream(totalSize);
-		int offset = 0;
-		int prepareSkips = 0;
-		while (offset < totalSize) {
-			int chunkSize = Math.min(ZkConstants.DEFAULT_BUFFER_CHUNK_SIZE, totalSize - offset);
-			byte[] chunkRequest = new byte[8];
-			writeInt32LE(chunkRequest, 0, offset);
-			writeInt32LE(chunkRequest, 4, chunkSize);
-			sendPacket(ZkConstants.CMD_READ_BUFFER, chunkRequest);
-			ZkPacket chunkResponse = receivePacket();
-			if (chunkResponse.isError() || chunkResponse.isUnauth() || chunkResponse.isAuthLock()) {
-				throw new ZkException("Device rejected " + label + " buffer chunk", chunkResponse.getCommandId());
-			}
-			if (chunkResponse.isPrepareData()) {
-				if (++prepareSkips > 3) {
-					throw new IOException("Device repeatedly returned prepare marker while reading " + label);
-				}
-				continue;
-			}
-			prepareSkips = 0;
-			byte[] chunk = chunkResponse.getPayload();
-			if (chunk.length == 0) {
-				break;
-			}
-			allData.write(chunk);
-			offset += chunk.length;
-		}
-		freeDeviceDataBuffer();
-		bulkReadSinceConnect = true;
-		return allData.toByteArray();
 	}
 
 	private List<UserInfo> enrichUserCreatedAt(List<UserInfo> users) {
@@ -462,12 +572,12 @@ public class ZkClient implements AutoCloseable {
 		}
 		try {
 			Map<String, LocalDateTime> firstLogByUser = new HashMap<>();
-			for (AttendanceLog log : getAllLog()) {
+			streamAllLog(log -> {
 				if (log.getUserId().isEmpty() || log.getTimestamp() == null) {
-					continue;
+					return;
 				}
 				firstLogByUser.merge(log.getUserId(), log.getTimestamp(), (a, b) -> a.isBefore(b) ? a : b);
-			}
+			});
 			List<UserInfo> enriched = new ArrayList<>(users.size());
 			for (UserInfo user : users) {
 				enriched.add(user.withCreatedAt(firstLogByUser.get(user.getUserId())));
@@ -512,7 +622,7 @@ public class ZkClient implements AutoCloseable {
 		byte[] tcpHeader = new byte[ZkConstants.TCP_HEADER_SIZE];
 		int magic = readTcpHeader(in, tcpHeader);
 		int payloadLength = readInt32LE(tcpHeader, 4);
-		if (payloadLength < ZkConstants.ZK_HEADER_SIZE || payloadLength > ZkConstants.MAX_PACKET_SIZE) {
+		if (payloadLength < ZkConstants.ZK_HEADER_SIZE || payloadLength > ZkConstants.MAX_FRAME_PAYLOAD_SIZE) {
 			throw new IOException("Invalid packet length: " + payloadLength);
 		}
 		byte[] payload = new byte[payloadLength];
@@ -532,6 +642,20 @@ public class ZkClient implements AutoCloseable {
 		if (!isConnected()) {
 			connect();
 		}
+	}
+
+	private void ensureBulkReadReady() throws IOException {
+		ensureConnected();
+		if (protocolMode == ProtocolMode.SECURE_PULL && bulkReadSinceConnect) {
+			reconnectPreservingCache();
+		}
+	}
+
+	private void reconnectPreservingCache() throws IOException {
+		List<AttendanceLog> cachedLogs = attendanceLogCache;
+		close();
+		connect();
+		attendanceLogCache = cachedLogs;
 	}
 
 	private void freeDeviceDataBuffer() {
@@ -643,6 +767,12 @@ public class ZkClient implements AutoCloseable {
 
 	private void closeSocketOnly() {
 		connected = false;
+		secureMode = false;
+		bulkReadSinceConnect = false;
+		if (aesKey != null) {
+			Arrays.fill(aesKey, (byte) 0);
+			aesKey = null;
+		}
 		if (in != null) {
 			try { in.close(); } catch (Exception ignored) {}
 			in = null;
