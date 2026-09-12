@@ -11,8 +11,13 @@ import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.interfaces.RSAPublicKey;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 /**
  * Client TCP Raw Socket chuyên dụng cho các dòng máy ZKTeco Firmware mới (Modern Firmware / SenseFace / Linux OS)
@@ -75,6 +80,7 @@ public class ZkNewSocketClient implements AutoCloseable {
 	private int replyId = 0;
 	private boolean secureMode = false;
 	private byte[] aesKey = null;
+	private List<ZkNewAttendanceLog> attendanceLogCache = null;
 	private volatile boolean connected = false;
 	private volatile boolean closed = false;
 	private ConnectionState connectionState = ConnectionState.DISCONNECTED;
@@ -117,6 +123,7 @@ public class ZkNewSocketClient implements AutoCloseable {
 			report.tcpConnected = true;
 			this.secureMode = false;
 			this.aesKey = null;
+			this.attendanceLogCache = null;
 
 			// 2. Gửi CMD_CONNECT (1000)
 			this.sessionId = 0;
@@ -404,9 +411,39 @@ public class ZkNewSocketClient implements AutoCloseable {
 	}
 
 	public synchronized List<ZkNewAttendanceLog> getAttendanceLogs() throws IOException {
+		if (attendanceLogCache != null) {
+			return new ArrayList<>(attendanceLogCache);
+		}
 		List<ZkNewAttendanceLog> logs = new ArrayList<>();
 		streamAttendanceLogs(logs::add);
+		attendanceLogCache = new ArrayList<>(logs);
 		return logs;
+	}
+
+	public synchronized List<ZkNewAttendanceLog> getAllLog() throws IOException {
+		return getAttendanceLogs();
+	}
+
+	public synchronized List<ZkNewAttendanceLog> getAttendanceLogs(long start, long end) throws IOException {
+		return getLogAt(start, end);
+	}
+
+	public synchronized List<ZkNewAttendanceLog> getLogAt(long start, long end) throws IOException {
+		LocalDateTime startTime = normalizeEpoch(start);
+		LocalDateTime endTime = normalizeEpoch(end);
+		List<ZkNewAttendanceLog> result = new ArrayList<>();
+		for (ZkNewAttendanceLog log : getAttendanceLogs()) {
+			LocalDateTime timestamp = log.getTimestamp();
+			if (timestamp == null) {
+				continue;
+			}
+			boolean afterStart = startTime == null || !timestamp.isBefore(startTime);
+			boolean beforeEnd = endTime == null || !timestamp.isAfter(endTime);
+			if (afterStart && beforeEnd) {
+				result.add(log);
+			}
+		}
+		return result;
 	}
 
 	public synchronized void streamAttendanceLogs(Consumer<ZkNewAttendanceLog> consumer) throws IOException {
@@ -419,30 +456,72 @@ public class ZkNewSocketClient implements AutoCloseable {
 		bufferReq[0] = 1;
 		bufferReq[1] = (byte) (ZkNewConstants.CMD_ATTLOG_RRQ & 0xFF);
 		bufferReq[2] = (byte) ((ZkNewConstants.CMD_ATTLOG_RRQ >> 8) & 0xFF);
+		byte[] data = readBufferedPayload(bufferReq, "log");
+		ZkNewRecordParser.parse(data, consumer);
+	}
 
+	public synchronized List<ZkNewUserInfo> getAllUserInfo() throws IOException {
+		if (!connected) connect();
+		byte[] bufferReq = new byte[] {
+				1,
+				(byte) (ZkNewConstants.CMD_USERTEMP_RRQ & 0xFF),
+				(byte) ((ZkNewConstants.CMD_USERTEMP_RRQ >> 8) & 0xFF),
+				(byte) ZkNewConstants.FCT_USER,
+				0, 0, 0, 0, 0, 0, 0
+		};
+		List<ZkNewUserInfo> users = ZkNewUserParser.parse(readBufferedPayload(bufferReq, "user"));
+		return enrichUserCreatedAtFromLogs(users);
+	}
+
+	public synchronized List<ZkNewUserInfo> getUsers() throws IOException {
+		return getAllUserInfo();
+	}
+
+	public synchronized List<ZkNewUserInfo> getAllUser() throws IOException {
+		return getAllUserInfo();
+	}
+
+	public synchronized ZkNewUserInfo getUserInfo(String userId) throws IOException {
+		if (userId == null || userId.isBlank()) {
+			return null;
+		}
+		String target = userId.trim();
+		for (ZkNewUserInfo user : getAllUserInfo()) {
+			if (target.equalsIgnoreCase(user.getUserId())) {
+				return user;
+			}
+		}
+		return null;
+	}
+
+	public synchronized ZkNewUserInfo getUser(String userId) throws IOException {
+		return getUserInfo(userId);
+	}
+
+	private byte[] readBufferedPayload(byte[] bufferReq, String label) throws IOException {
+		freeDeviceDataBuffer();
 		sendPacket(ZkNewConstants.CMD_DATA_WRRQ, bufferReq);
 		ZkNewPacket resp = receivePacket();
 		if (resp.isError() || resp.isUnauth()) {
-			throw new IOException("Thiết bị từ chối đọc log: " + resp.getCommandId());
+			throw new IOException("Thiết bị từ chối đọc " + label + ": " + resp.getCommandId());
 		}
 
 		byte[] payload = resp.getPayload();
 		if (payload.length < 4) {
-			throw new IOException("Phản hồi đọc log thiếu total size: " + payload.length);
+			throw new IOException("Phản hồi đọc " + label + " thiếu total size: " + payload.length);
 		}
 
 		if (resp.isData() || resp.getCommandId() == ZkNewConstants.CMD_ACK_DATA) {
-			ZkNewRecordParser.parse(payload, consumer);
 			freeDeviceDataBuffer();
-			return;
+			return payload;
 		}
 
 		int totalSize = extractPreparedBufferSize(payload);
 		if (totalSize <= 0) {
-			return;
+			return new byte[0];
 		}
 		if (totalSize > ZkNewConstants.MAX_PACKET_SIZE) {
-			throw new IOException("Dung lượng log vượt giới hạn an toàn: " + totalSize);
+			throw new IOException("Dung lượng " + label + " vượt giới hạn an toàn: " + totalSize);
 		}
 
 		ByteArrayOutputStream allData = new ByteArrayOutputStream(totalSize);
@@ -467,11 +546,7 @@ public class ZkNewSocketClient implements AutoCloseable {
 		}
 
 		freeDeviceDataBuffer();
-		byte[] data = allData.toByteArray();
-		if (data.length <= 0) {
-			return;
-		}
-		ZkNewRecordParser.parse(data, consumer);
+		return allData.toByteArray();
 	}
 
 	private static int extractPreparedBufferSize(byte[] payload) throws IOException {
@@ -491,6 +566,49 @@ public class ZkNewSocketClient implements AutoCloseable {
 			receivePacket();
 		} catch (Exception ignored) {
 		}
+	}
+
+	private List<ZkNewUserInfo> enrichUserCreatedAtFromLogs(List<ZkNewUserInfo> users) throws IOException {
+		if (users == null || users.isEmpty()) {
+			return List.of();
+		}
+		boolean needsCreatedAt = false;
+		for (ZkNewUserInfo user : users) {
+			if (user.getCreatedAt() == null) {
+				needsCreatedAt = true;
+				break;
+			}
+		}
+		if (!needsCreatedAt) {
+			return users;
+		}
+
+		Map<String, LocalDateTime> firstLogByUser = new HashMap<>();
+		for (ZkNewAttendanceLog log : getAttendanceLogs()) {
+			if (log.getUserId() == null || log.getUserId().isBlank() || log.getTimestamp() == null) {
+				continue;
+			}
+			firstLogByUser.merge(log.getUserId().trim(), log.getTimestamp(),
+					(a, b) -> a.isBefore(b) ? a : b);
+		}
+
+		List<ZkNewUserInfo> result = new ArrayList<>(users.size());
+		for (ZkNewUserInfo user : users) {
+			LocalDateTime createdAt = user.getCreatedAt();
+			if (createdAt == null) {
+				createdAt = firstLogByUser.get(user.getUserId());
+			}
+			result.add(user.withCreatedAt(createdAt));
+		}
+		return result;
+	}
+
+	private static LocalDateTime normalizeEpoch(long value) {
+		if (value <= 0) {
+			return null;
+		}
+		long millis = value > 10_000_000_000L ? value : value * 1000L;
+		return LocalDateTime.ofInstant(Instant.ofEpochMilli(millis), ZoneId.systemDefault());
 	}
 
 	/**

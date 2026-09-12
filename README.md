@@ -26,7 +26,10 @@ Verified against ZKTeco SenseFace 2A firmware `Ver 6.60 Jan 13 2025`:
 - AES-256-CBC secure tunnel over `50 50 83 7C`
 - Comm Key auth: `1102 -> 2001`, then `1106 -> 2000`
 - Device info: serial, model, platform, MAC, firmware version, capacity counts
+- User info: user ID, name, privilege, enabled status, best-effort created time
 - Attendance logs through both direct `1501` and prepared-buffer `1503/1504`
+- Attendance range filter through `getLogAt(long start, long end)`; accepts epoch
+  milliseconds or epoch seconds.
 
 Quick test:
 
@@ -34,6 +37,23 @@ Quick test:
 javac -encoding UTF-8 -d bin src\zk4370new\*.java
 java -cp bin zk4370new.ZkNewMain 192.168.1.33 4370 111111
 ```
+
+Core API:
+
+```java
+try (ZkNewSocketClient client = new ZkNewSocketClient("192.168.1.33", 4370, 111111)) {
+    client.connect();
+    ZkNewDeviceInfo device = client.getDeviceInfo();
+    List<ZkNewUserInfo> users = client.getAllUserInfo();
+    List<ZkNewAttendanceLog> allLogs = client.getAllLog();
+    List<ZkNewAttendanceLog> rangedLogs = client.getLogAt(start, end);
+}
+```
+
+Note: the public 4370 user record exposed by the current SenseFace firmware and
+the official COM SDK does not include a dedicated "created at" field. The
+`createdAt` value is therefore filled from the first attendance timestamp seen
+for that user when logs are available; otherwise it remains `null`.
 
 Device-side requirements remain the same: TCP port `4370` must be reachable,
 standalone PC communication must be enabled, and the device Comm Key must match

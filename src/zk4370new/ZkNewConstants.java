@@ -36,6 +36,7 @@ public final class ZkNewConstants {
 	public static final int CMD_VERSION = 1100;
 	public static final int CMD_AUTH = 1102;
 	public static final int CMD_AUTH_EXT = 1106;
+	public static final int FCT_USER = 5;
 
 	// Lệnh đệm dữ liệu (Big Data Buffering)
 	public static final int CMD_PREPARE_DATA = 1500;
