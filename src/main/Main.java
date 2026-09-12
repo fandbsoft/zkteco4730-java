@@ -30,12 +30,12 @@ public class Main {
 		System.out.println("================================================================================");
 
 		// Kiểm thử thiết bị 1: Ronald Jack DG 600BID (Firmware 2017)
-//		testDevice("MÁY 1: RONALD JACK DG 600BID", "192.168.1.39", ZkConstants.DEFAULT_PORT, 111111);
+		testDevice("MÁY 1: RONALD JACK DG 600BID", "192.168.1.39", ZkConstants.DEFAULT_PORT, 111111);
 
 		System.out.println("\n\n");
 
 		// Kiểm thử thiết bị 2: ZKTeco Senseface 2A (Firmware 2025)
-		testDevice("MÁY 2: ZKTECO SENSEFACE 2A", "192.168.1.33", ZkConstants.DEFAULT_PORT, 111111);
+//		testDevice("MÁY 2: ZKTECO SENSEFACE 2A", "192.168.1.33", ZkConstants.DEFAULT_PORT, 111111);
 //		System.out.println("\n\n");
 //		testDevice("MÁY 3: ZKTECO SENSEFACE 2Aa", "192.168.1.28", ZkConstants.DEFAULT_PORT, 111111);
 

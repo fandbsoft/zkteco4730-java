@@ -11,6 +11,7 @@ public final class ZkNewConstants {
 	public static final int DEFAULT_PORT = 4370;
 	public static final int DEFAULT_CONNECT_TIMEOUT_MS = 5_000;
 	public static final int DEFAULT_READ_TIMEOUT_MS = 10_000;
+	public static final int DEFAULT_UNLOCK_DELAY_SECONDS = 5;
 
 	// Magic Header cho TCP Framing (Little-Endian & Wire Bytes)
 	public static final int TCP_MAGIC = 0x5050827D;     // 50 50 82 7D (ASCII "PP\x82}") -> Little Endian: 0x7D825050
@@ -32,6 +33,7 @@ public final class ZkNewConstants {
 	public static final int CMD_USER_RRQ = 8;
 	public static final int CMD_USERTEMP_RRQ = 9;
 	public static final int CMD_UNLOCK = 31;
+	public static final int CMD_ACUNLOCK = 31;
 	public static final int CMD_GET_FREE_SIZES = 50;
 	public static final int CMD_VERSION = 1100;
 	public static final int CMD_AUTH = 1102;

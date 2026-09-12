@@ -27,6 +27,7 @@ Verified against ZKTeco SenseFace 2A firmware `Ver 6.60 Jan 13 2025`:
 - Comm Key auth: `1102 -> 2001`, then `1106 -> 2000`
 - Device info: serial, model, platform, MAC, firmware version, capacity counts
 - User info: user ID, name, privilege, enabled status, best-effort created time
+- Remote door unlock with `CMD_UNLOCK` / `ACUnlock` command `31`
 - Attendance logs through both direct `1501` and prepared-buffer `1503/1504`
 - Attendance range filter through `getLogAt(long start, long end)`; accepts epoch
   milliseconds or epoch seconds.
@@ -47,6 +48,11 @@ try (ZkNewSocketClient client = new ZkNewSocketClient("192.168.1.33", 4370, 1111
     List<ZkNewUserInfo> users = client.getAllUserInfo();
     List<ZkNewAttendanceLog> allLogs = client.getAllLog();
     List<ZkNewAttendanceLog> rangedLogs = client.getLogAt(start, end);
+    boolean unlocked = client.unlock(5);
+}
+
+try (ZkNewUnlock unlocker = new ZkNewUnlock("192.168.1.33", 4370, 111111)) {
+    boolean unlocked = unlocker.unlock(5);
 }
 ```
 

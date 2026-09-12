@@ -625,7 +625,15 @@ public class ZkNewSocketClient implements AutoCloseable {
 
 		sendPacket(ZkNewConstants.CMD_UNLOCK, payload);
 		ZkNewPacket resp = receivePacket();
-		return resp.isOk();
+		return resp.isOk() || resp.getCommandId() == ZkNewConstants.CMD_ACK_OK;
+	}
+
+	public synchronized boolean unlockDoor(int delaySeconds) throws IOException {
+		return unlock(delaySeconds);
+	}
+
+	public synchronized boolean unlock() throws IOException {
+		return unlock(ZkNewConstants.DEFAULT_UNLOCK_DELAY_SECONDS);
 	}
 
 	public boolean isConnected() {
