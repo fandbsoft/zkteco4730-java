@@ -1,66 +1,77 @@
-# zkteco4370-java
+# zkteco TCP 4370 Java SDK
 
-Pure Java 21 SDK for communicating with ZKTeco-compatible biometric devices over
-the TCP 4370 pull protocol.
+Pure Java SDK for ZKTeco standalone devices over TCP port `4370`.
 
 The library uses `java.net.Socket` only. It does not depend on Windows COM,
-native DLLs, shell commands, or OS-specific helpers.
+native DLLs, shell commands, or third-party libraries.
 
-## Supported mode
+## Package
 
-- Legacy/standard ZKTeco pull protocol on TCP port `4370`.
-- Attendance log retrieval.
-- Device option and size queries.
-- User list retrieval for supported legacy layouts.
-- Remote door unlock when the device accepts `CMD_UNLOCK`.
+All public API lives in one package:
 
-## New firmware / SenseFace secure 4370
+```text
+zkteco
+```
 
-The `zk4370new` package implements the newer secure pull flow used by SenseFace
-firmware that answers `CMD_CONNECT` with `6001`. It keeps the legacy
-`src/main/zk` package untouched.
+The old `main.zk` and `zk4370new` packages have been merged and removed.
 
-Verified against ZKTeco SenseFace 2A firmware `Ver 6.60 Jan 13 2025`:
+## Supported firmware paths
 
-- RSA/DMC handshake: `10063 -> 10064 -> 10065`
-- AES-256-CBC secure tunnel over `50 50 83 7C`
-- Comm Key auth: `1102 -> 2001`, then `1106 -> 2000`
-- Device info: serial, model, platform, MAC, firmware version, capacity counts
-- User info: user ID, name, privilege, enabled status, best-effort created time
-- Remote door unlock with `CMD_UNLOCK` / `ACUnlock` command `31`
-- Attendance logs through both direct `1501` and prepared-buffer `1503/1504`
-- Attendance range filter through `getLogAt(long start, long end)`; accepts epoch
-  milliseconds or epoch seconds.
+- Legacy/standard ZKTeco pull protocol.
+- Secure pull protocol used by newer SenseFace/Linux firmware that answers
+  `CMD_CONNECT` with `6001`.
+- Automatic protocol detection inside one `ZkClient` instance.
 
-Quick test:
+The public workflow follows ZKTeco standalone communication behavior documented
+for PC Connection / Comm Key: device info, employee synchronization, transaction
+download, and access-control unlock over TCP/IP.
+
+## Features
+
+- Device info: serial, model, platform, MAC, firmware version, capacity counts.
+- User info: `userId`, `name`, best-effort `createdAt`, privilege, enabled.
+- All attendance logs.
+- Attendance logs by `long start`, `long end`; accepts epoch milliseconds or
+  epoch seconds.
+- Remote door unlock with `CMD_UNLOCK` / `ACUnlock` command `31`.
+
+## Quick test
 
 ```powershell
-javac -encoding UTF-8 -d bin src\zk4370new\*.java
-java -cp bin zk4370new.ZkNewMain 192.168.1.33 4370 111111
+javac -encoding UTF-8 -d bin src\zkteco\*.java src\main\Main.java
+java -cp bin main.Main
 ```
 
-Core API:
+Or test one device:
+
+```powershell
+java -cp bin main.Main 192.168.1.33 4370 111111
+```
+
+## Core API
 
 ```java
-try (ZkNewSocketClient client = new ZkNewSocketClient("192.168.1.33", 4370, 111111)) {
-    client.connect();
-    ZkNewDeviceInfo device = client.getDeviceInfo();
-    List<ZkNewUserInfo> users = client.getAllUserInfo();
-    List<ZkNewAttendanceLog> allLogs = client.getAllLog();
-    List<ZkNewAttendanceLog> rangedLogs = client.getLogAt(start, end);
-    boolean unlocked = client.unlock(5);
-}
+import java.util.List;
 
-try (ZkNewUnlock unlocker = new ZkNewUnlock("192.168.1.33", 4370, 111111)) {
-    boolean unlocked = unlocker.unlock(5);
+import zkteco.AttendanceLog;
+import zkteco.DeviceInfo;
+import zkteco.UserInfo;
+import zkteco.ZkClient;
+
+try (ZkClient zk = new ZkClient("192.168.1.33", 4370, 111111)) {
+    DeviceInfo device = zk.getDeviceInfo();
+    List<UserInfo> users = zk.getAllUser();
+    List<AttendanceLog> allLogs = zk.getAllLog();
+    List<AttendanceLog> rangedLogs = zk.getLogAt(start, end);
+    boolean unlocked = zk.unlock(5);
 }
 ```
 
-Note: the public 4370 user record exposed by the current SenseFace firmware and
-the official COM SDK does not include a dedicated "created at" field. The
-`createdAt` value is therefore filled from the first attendance timestamp seen
-for that user when logs are available; otherwise it remains `null`.
+Note: current public 4370 user records on tested SenseFace firmware do not expose
+a dedicated user creation timestamp. `createdAt` is filled from the first
+attendance timestamp seen for that user when logs are available; otherwise it
+remains `null`.
 
-Device-side requirements remain the same: TCP port `4370` must be reachable,
-standalone PC communication must be enabled, and the device Comm Key must match
-the password passed to the client.
+Device-side requirements: TCP port `4370` must be reachable, standalone PC
+communication must be enabled, and the device Comm Key must match the password
+passed to `ZkClient`.

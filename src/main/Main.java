@@ -1,147 +1,109 @@
 package main;
 
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 
-import main.zk.ZkAttendanceLog;
-import main.zk.ZkConstants;
-import main.zk.ZkDeviceInfo;
-import main.zk.ZkUnlock;
-import main.zk.ZkUserInfo;
+import zkteco.AttendanceLog;
+import zkteco.DeviceInfo;
+import zkteco.UserInfo;
+import zkteco.ZkClient;
+import zkteco.ZkConstants;
 
 /**
- * Chương trình kiểm thử toàn diện 4 thành phần chính của thư viện Pure Java TCP Socket (Cổng 4370):
- * 1. ZkAttendanceLog: getAllLog() và getLogAt(long timeStart, long timeEnd)
- * 2. ZkUnlock: Điều khiển mở cửa (Access Control Unlock)
- * 3. ZkDeviceInfo: Lấy thông số cấu hình và phần cứng thiết bị
- * 4. ZkUserInfo: Lấy thông tin người dùng (userId, name, createdAt) để map vào MyBM
- * 
- * Chạy thuần 100% Java TCP Socket, không phụ thuộc bất kỳ thư viện Windows, COM hay ProcessBuilder nào.
- * Tương thích Windows, Linux, macOS, Docker.
+ * Test program for the unified zkteco TCP 4370 library.
  */
 public class Main {
 
 	public static void main(String[] args) {
 		System.out.println("================================================================================");
-		System.out.println("       KIỂM THỬ TOÀN DIỆN THƯ VIỆN PURE JAVA TCP SOCKET (PORT 4370)             ");
-		System.out.println("       TƯƠNG THÍCH ĐA NỀN TẢNG (WINDOWS / LINUX / MACOS) - ZERO COM DLL         ");
+		System.out.println("       KIEM THU THU VIEN zkteco - PURE JAVA RAW SOCKET TCP 4370                 ");
+		System.out.println("       AUTO DETECT LEGACY FIRMWARE VA SECURE SENSEFACE/LINUX FIRMWARE           ");
 		System.out.println("================================================================================");
 
-		// Kiểm thử thiết bị 1: Ronald Jack DG 600BID (Firmware 2017)
-		testDevice("MÁY 1: RONALD JACK DG 600BID", "192.168.1.39", ZkConstants.DEFAULT_PORT, 111111);
-
-		System.out.println("\n\n");
-
-		// Kiểm thử thiết bị 2: ZKTeco Senseface 2A (Firmware 2025)
-//		testDevice("MÁY 2: ZKTECO SENSEFACE 2A", "192.168.1.33", ZkConstants.DEFAULT_PORT, 111111);
-//		System.out.println("\n\n");
-//		testDevice("MÁY 3: ZKTECO SENSEFACE 2Aa", "192.168.1.28", ZkConstants.DEFAULT_PORT, 111111);
+		if (args.length >= 3) {
+			String label = args.length >= 4 ? args[3] : "CUSTOM DEVICE";
+			testDevice(label, args[0], Integer.parseInt(args[1]), Integer.parseInt(args[2]));
+		} else {
+//			testDevice("MAY 1: RONALD JACK DG 600BID", "192.168.1.39", ZkConstants.DEFAULT_PORT, 111111);
+			System.out.println("\n\n");
+//			testDevice("MAY 2: ZKTECO SENSEFACE 2A", "192.168.1.33", ZkConstants.DEFAULT_PORT, 111111);
+			System.out.println("\n\n");
+			testDevice("MAY 3: ZKTECO SENSEFACE 2Aa", "192.168.1.28", ZkConstants.DEFAULT_PORT, 111111);
+		}
 
 		System.out.println("\n================================================================================");
-		System.out.println(" KẾT LUẬN:");
-		System.out.println(" - Thư viện dùng 100% Java TCP Socket trên cổng 4370, không dùng COM/DLL/native command.");
-		System.out.println(" - Thiết bị legacy pull protocol đọc được trực tiếp.");
-		System.out.println(" - Thiết bị trả 6001/2032 sẽ báo lỗi protocol/auth thật, không trả dữ liệu giả.");
+		System.out.println(" HOAN TAT KIEM THU THU VIEN zkteco");
 		System.out.println("================================================================================");
 	}
 
 	public static void testDevice(String label, String ip, int port, int password) {
 		System.out.println("********************************************************************************");
-		System.out.printf("  ĐANG KIỂM THỬ: %s (%s:%d)%n", label, ip, port);
+		System.out.printf("  DANG KIEM THU: %s (%s:%d)%n", label, ip, port);
 		System.out.println("********************************************************************************");
 
-		// =====================================================================
-		// PHẦN 1: KIỂM THỬ ZkDeviceInfo (Lấy thông tin phần cứng máy)
-		// =====================================================================
-		System.out.println("\n>>> [PHẦN 1] KIỂM THỬ ZkDeviceInfo: Lấy thông tin thiết bị");
-		try (ZkDeviceInfo devClient = new ZkDeviceInfo(ip, port, password)) {
-			ZkDeviceInfo info = devClient.getDeviceInfo();
-			System.out.println("-> Thông tin thiết bị nhận được:");
-			System.out.printf("   + Serial Number     : %s%n", info.getSerialNumber());
-			System.out.printf("   + Firmware Version  : %s%n", info.getFirmwareVersion());
-			System.out.printf("   + Nền tảng (Platform): %s%n", info.getPlatform());
-			System.out.printf("   + Địa chỉ MAC       : %s%n", info.getMacAddress());
-			System.out.printf("   + Model thiết bị    : %s%n", info.getDeviceModel());
-			System.out.printf("   + Tổng số User      : %d%n", info.getUserCount());
-			System.out.printf("   + Tổng số Vân tay   : %d%n", info.getFpCount());
-			System.out.printf("   + Tổng số Khuôn mặt : %d%n", info.getFaceCount());
-			System.out.printf("   + Tổng số Log       : %d%n", info.getLogCount());
-			System.out.println("   => [PASS] ZkDeviceInfo hoạt động chính xác 100%!");
-		} catch (Exception e) {
-			System.err.println("   [FAIL] Lỗi kiểm thử ZkDeviceInfo: " + e.getMessage());
-		}
+		try (ZkClient zk = new ZkClient(ip, port, password)) {
+			zk.connect();
+			System.out.println("-> Protocol tu dong nhan dien: " + zk.getProtocolName());
 
-		// =====================================================================
-		// PHẦN 2: KIỂM THỬ ZkUserInfo (Lấy User: userId, name, createdAt cho MyBM)
-		// =====================================================================
-		System.out.println("\n>>> [PHẦN 2] KIỂM THỬ ZkUserInfo: Lấy danh sách nhân viên cho MyBM");
-		try (ZkUserInfo userClient = new ZkUserInfo(ip, port, password)) {
-			List<ZkUserInfo> users = userClient.getAllUser();
-			System.out.printf("-> Tìm thấy %d nhân viên trên máy chấm công:%n", users.size());
-			for (ZkUserInfo u : users) {
-				System.out.printf("   * ID: %-4s | Tên: %-12s | Ngày tạo: %s (Epoch: %d)%n",
-						u.getUserId(), u.getName(), u.getCreatedAt(), u.getCreatedAtEpochMilli());
+			System.out.println("\n>>> [1] Lay thong tin device");
+			DeviceInfo info = zk.getDeviceInfo();
+			System.out.printf("   + Serial Number      : %s%n", info.getSerialNumber());
+			System.out.printf("   + Firmware Version   : %s%n", info.getFirmwareVersion());
+			System.out.printf("   + Platform           : %s%n", info.getPlatform());
+			System.out.printf("   + MAC                : %s%n", info.getMacAddress());
+			System.out.printf("   + Model              : %s%n", info.getDeviceModel());
+			System.out.printf("   + User Count         : %d%n", info.getUserCount());
+			System.out.printf("   + Fingerprint Count  : %d%n", info.getFpCount());
+			System.out.printf("   + Face Count         : %d%n", info.getFaceCount());
+			System.out.printf("   + Log Count          : %d%n", info.getLogCount());
+			System.out.println("   => [PASS] DeviceInfo");
+
+			System.out.println("\n>>> [2] Lay danh sach user(userID, name, ngay tao)");
+			List<UserInfo> users = zk.getAllUser();
+			System.out.printf("-> Tim thay %d user:%n", users.size());
+			for (UserInfo user : users) {
+				System.out.printf("   * ID: %-6s | Name: %-16s | CreatedAt: %-20s | Epoch: %-13d | Privilege: %-2d | Enabled: %s%n",
+						user.getUserId(), user.getName(), user.getCreatedAt(), user.getCreatedAtEpochMilli(),
+						user.getPrivilege(), user.isEnabled());
 			}
+			System.out.println("   => [PASS] UserInfo");
 
-			// Kiểm thử tìm kiếm theo ID cụ thể
-			ZkUserInfo u1 = userClient.getUser("1");
-			if (u1 != null) {
-				System.out.printf("   + Kiểm tra getUser('1') -> Tên: %s, Ngày tạo: %s%n", u1.getName(), u1.getCreatedAt());
-			}
-			System.out.println("   => [PASS] ZkUserInfo sẵn sàng map vào phần mềm MyBM!");
-		} catch (Exception e) {
-			System.err.println("   [FAIL] Lỗi kiểm thử ZkUserInfo: " + e.getMessage());
-		}
-
-		// =====================================================================
-		// PHẦN 3: KIỂM THỬ ZkUnlock (Mở cửa kiểm soát ra vào - Access Control)
-		// =====================================================================
-		System.out.println("\n>>> [PHẦN 3] KIỂM THỬ ZkUnlock: Lệnh mở cửa (Access Control)");
-		try (ZkUnlock unlocker = new ZkUnlock(ip, port, password)) {
-			int delaySeconds = 5;
-			System.out.printf("-> Gửi lệnh mở cửa (Delay %d giây)...%n", delaySeconds);
-			boolean unlocked = unlocker.unlock(delaySeconds);
-			System.out.println("-> Trạng thái mở cửa: " + (unlocked ? "THÀNH CÔNG (Relay Activated) [PASS]" : "THẤT BẠI [FAIL]"));
-		} catch (Exception e) {
-			System.err.println("   [FAIL] Lỗi kiểm thử ZkUnlock: " + e.getMessage());
-		}
-
-		// =====================================================================
-		// PHẦN 4: KIỂM THỬ ZkAttendanceLog (getAllLog và getLogAt)
-		// =====================================================================
-		System.out.println("\n>>> [PHẦN 4] KIỂM THỬ ZkAttendanceLog: getAllLog() và getLogAt(...)");
-		try (ZkAttendanceLog zkLog = new ZkAttendanceLog(ip, port, password)) {
-
-			// 4.1. getAllLog()
-			System.out.println("\n [4.1] Gọi getAllLog() lấy toàn bộ log...");
+			System.out.println("\n>>> [3] Lay tat ca log cham cong");
 			long t1 = System.currentTimeMillis();
-			List<ZkAttendanceLog> allLogs = zkLog.getAllLog();
+			List<AttendanceLog> allLogs = zk.getAllLog();
 			long t2 = System.currentTimeMillis();
-			System.out.printf(" -> Tải thành công %d bản ghi (Thời gian: %d ms)%n", allLogs.size(), (t2 - t1));
-			allLogs.forEach(log -> System.out.printf("		[%02d] %s%n", (allLogs.indexOf(log) + 1), formatLog(log)));
+			System.out.printf("-> Tai thanh cong %d log trong %d ms:%n", allLogs.size(), t2 - t1);
+			for (int i = 0; i < allLogs.size(); i++) {
+				System.out.printf("   [%02d] %s%n", i + 1, formatLog(allLogs.get(i)));
+			}
+			System.out.println("   => [PASS] getAllLog");
 
-			
-			
-			LocalDateTime startRange1 = LocalDateTime.of(2026, 9, 10, 0, 0, 0);
-			LocalDateTime endRange1 = LocalDateTime.of(2026, 9, 12, 23, 59, 59);
-			long startMillis = startRange1.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
-			long endMillis = endRange1.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+			System.out.println("\n>>> [4] Lay log cham cong theo thoi diem long start, long end");
+			LocalDateTime startRange = LocalDateTime.of(2026, 9, 10, 0, 0, 0);
+			LocalDateTime endRange = LocalDateTime.of(2026, 9, 12, 23, 59, 59);
+			long startMillis = startRange.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+			long endMillis = endRange.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+			List<AttendanceLog> rangeLogs = zk.getLogAt(startMillis, endMillis);
+			System.out.printf("-> Tim thay %d log trong khoang [%d, %d]:%n", rangeLogs.size(), startMillis, endMillis);
+			for (int i = 0; i < rangeLogs.size(); i++) {
+				System.out.printf("   [%02d] %s%n", i + 1, formatLog(rangeLogs.get(i)));
+			}
+			System.out.println("   => [PASS] getLogAt");
 
-			System.out.println("\n [4.2] Gọi getLogAt(startMillis, endMillis) theo Epoch Milliseconds [10/09 - 12/09]...");
-			List<ZkAttendanceLog> logsRange1 = zkLog.getLogAt(startMillis, endMillis);
-			System.out.printf(" -> Kết quả: Tìm thấy %d bản ghi:%n", logsRange1.size());
-			logsRange1.forEach(log -> System.out.printf("	[%02d] %s%n", (logsRange1.indexOf(log) + 1), formatLog(log)));
-			System.out.println("\n   => [PASS] ZkAttendanceLog hoạt động hoàn hảo!");
-
-		} catch (IOException ex) {
-			System.err.println("   [FAIL] Lỗi kiểm thử ZkAttendanceLog: " + ex.getMessage());
+			System.out.println("\n>>> [5] Mo cua");
+			int delaySeconds = ZkConstants.DEFAULT_UNLOCK_DELAY_SECONDS;
+			System.out.printf("-> Gui CMD_UNLOCK=%d, delay=%d giay...%n", ZkConstants.CMD_UNLOCK, delaySeconds);
+			boolean unlocked = zk.unlock(delaySeconds);
+			System.out.println("-> Trang thai mo cua: " + (unlocked ? "THANH CONG [PASS]" : "THAT BAI [FAIL]"));
+		} catch (Exception e) {
+			System.err.println("   [FAIL] " + label + ": " + e.getMessage());
+			e.printStackTrace(System.err);
 		}
 	}
 
-	private static String formatLog(ZkAttendanceLog log) {
-		return String.format("userId=%-4s | time=%s | verify=%-12s | state=%-10s | workCode=%d",
+	private static String formatLog(AttendanceLog log) {
+		return String.format("userId=%-6s | time=%s | verify=%-16s | state=%-10s | workCode=%d",
 				log.getUserId(),
 				log.getTimestamp(),
 				log.getVerifyModeName() + "(" + log.getVerifyMode() + ")",

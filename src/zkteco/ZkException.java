@@ -1,12 +1,13 @@
-package main.zk;
+package zkteco;
 
 import java.io.IOException;
 
 /**
- * Custom exception representing errors encountered during ZKTeco standalone socket communications.
+ * Checked exception for ZKTeco socket protocol failures.
  */
 public class ZkException extends IOException {
 	private static final long serialVersionUID = 1L;
+
 	private final int responseCode;
 
 	public ZkException(String message) {
@@ -15,7 +16,7 @@ public class ZkException extends IOException {
 	}
 
 	public ZkException(String message, int responseCode) {
-		super(message + " (Response code: " + responseCode + ")");
+		super(message + " (response=" + responseCode + ")");
 		this.responseCode = responseCode;
 	}
 

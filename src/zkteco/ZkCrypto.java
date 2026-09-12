@@ -1,4 +1,4 @@
-package zk4370new;
+package zkteco;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -24,8 +24,8 @@ import javax.crypto.spec.SecretKeySpec;
 /**
  * Tiện ích xử lý mã hóa, scrambling Comm Key và phân tích bảo mật cho Firmware mới.
  */
-public final class ZkNewCrypto {
-	private ZkNewCrypto() {}
+public final class ZkCrypto {
+	private ZkCrypto() {}
 
 	private static final SecureRandom RANDOM = new SecureRandom();
 	private static final int DMC_CRC_SEED = 0xFFEEBBAA;
@@ -103,7 +103,7 @@ public final class ZkNewCrypto {
 	}
 
 	private static int resolveAuthTickLowByte() {
-		String override = System.getProperty("zk4370new.authTick");
+		String override = System.getProperty("zkteco.authTick");
 		if (override != null && !override.isBlank()) {
 			return Integer.decode(override.trim()) & 0xFF;
 		}
@@ -275,13 +275,13 @@ public final class ZkNewCrypto {
 		writeInt32LE(inner, 6 + zkBytes.length, crc32Seeded(zkBytes, 0, zkBytes.length));
 
 		byte[] encrypted = aesCbcZeroIv(inner, aesKey, Cipher.ENCRYPT_MODE);
-		byte[] frame = new byte[ZkNewConstants.TCP_HEADER_SIZE + encrypted.length];
+		byte[] frame = new byte[ZkConstants.TCP_HEADER_SIZE + encrypted.length];
 		frame[0] = 0x50;
 		frame[1] = 0x50;
 		frame[2] = (byte) 0x83;
 		frame[3] = 0x7C;
 		writeInt32LE(frame, 4, encrypted.length);
-		System.arraycopy(encrypted, 0, frame, ZkNewConstants.TCP_HEADER_SIZE, encrypted.length);
+		System.arraycopy(encrypted, 0, frame, ZkConstants.TCP_HEADER_SIZE, encrypted.length);
 		return frame;
 	}
 
@@ -294,7 +294,7 @@ public final class ZkNewCrypto {
 			throw new IOException("Secure payload magic không hợp lệ");
 		}
 		int zkLength = readInt32LE(inner, 2);
-		if (zkLength < ZkNewConstants.ZK_HEADER_SIZE || zkLength + 10 > inner.length) {
+		if (zkLength < ZkConstants.ZK_HEADER_SIZE || zkLength + 10 > inner.length) {
 			throw new IOException("Secure inner ZK length không hợp lệ: " + zkLength);
 		}
 		int expectedCrc = readInt32LE(inner, 6 + zkLength);
@@ -543,3 +543,4 @@ public final class ZkNewCrypto {
 		}
 	}
 }
+
