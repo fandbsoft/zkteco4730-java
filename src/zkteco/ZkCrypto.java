@@ -79,13 +79,13 @@ public final class ZkCrypto {
 		// Hoán vị 2 từ 16-bit
 		int s0 = (int) ((k >> 16) & 0xFF);
 		int s1 = (int) ((k >> 24) & 0xFF);
-		int s2 = (int) (k & 0xFF);
+//		int s2 = (int) (k & 0xFF);
 		int s3 = (int) ((k >> 8) & 0xFF);
 
 		// XOR với chuỗi khóa định danh 'S', 'O', 'Z', 'K'
 		s0 ^= 'S';
 		s1 ^= 'O';
-		s2 ^= 'Z';
+//		s2 ^= 'Z';
 		s3 ^= 'K';
 
 		// Trộn byte salt B (ticks & 0xFF) tại vị trí byte thứ 3
@@ -129,7 +129,7 @@ public final class ZkCrypto {
 		}
 		key = (key + (sessionId & 0xFFFFL)) & 0xFFFFFFFFL;
 
-		int b0 = ((int) key & 0xFF) ^ 0x5A;
+//		int b0 = ((int) key & 0xFF) ^ 0x5A;
 		int b1 = (((int) key >>> 8) & 0xFF) ^ 0x4B;
 		int b2 = (((int) key >>> 16) & 0xFF) ^ 0x53;
 		int b3 = (((int) key >>> 24) & 0xFF) ^ 0x4F;
@@ -351,11 +351,11 @@ public final class ZkCrypto {
 		return cipher.doFinal(input);
 	}
 
-	private static byte[] aesEcb(byte[] input, byte[] key, int mode) throws GeneralSecurityException {
-		Cipher cipher = Cipher.getInstance("AES/ECB/NoPadding");
-		cipher.init(mode, new SecretKeySpec(key, "AES"));
-		return cipher.doFinal(input);
-	}
+//	private static byte[] aesEcb(byte[] input, byte[] key, int mode) throws GeneralSecurityException {
+//		Cipher cipher = Cipher.getInstance("AES/ECB/NoPadding");
+//		cipher.init(mode, new SecretKeySpec(key, "AES"));
+//		return cipher.doFinal(input);
+//	}
 
 	private static byte[] aesCbcZeroIv(byte[] input, byte[] key, int mode) throws GeneralSecurityException {
 		Cipher cipher = Cipher.getInstance("AES/CBC/NoPadding");
