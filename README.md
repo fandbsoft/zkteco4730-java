@@ -14,18 +14,27 @@ native DLLs, shell commands, or OS-specific helpers.
 - User list retrieval for supported legacy layouts.
 - Remote door unlock when the device accepts `CMD_UNLOCK`.
 
-## Secure/new firmware behavior
+## New firmware / SenseFace secure 4370
 
-Some newer access-control terminals answer `CMD_CONNECT` with response `6001`
-and reject later pull commands with `2032`. In that state the device is not
-accepting the public legacy pull protocol directly. The library now reports this
-as `ZkUnsupportedProtocolException` instead of returning cached/fake data.
+The `zk4370new` package implements the newer secure pull flow used by SenseFace
+firmware that answers `CMD_CONNECT` with `6001`. It keeps the legacy
+`src/main/zk` package untouched.
 
-Check the device Communication / PC Connection / Cloud Service settings:
+Verified against ZKTeco SenseFace 2A firmware `Ver 6.60 Jan 13 2025`:
 
-- `TCP COMM Port` should be reachable, default `4370`.
-- `Comm Key` must match the password passed to the library when legacy pull is
-  enabled.
-- Devices configured for AC Push, TA Push, BEST, ZKBioTime, ZKBioSecurity, or
-  vendor-locked secure pull may require changing the device protocol mode or
-  using the corresponding official server/SDK channel.
+- RSA/DMC handshake: `10063 -> 10064 -> 10065`
+- AES-256-CBC secure tunnel over `50 50 83 7C`
+- Comm Key auth: `1102 -> 2001`, then `1106 -> 2000`
+- Device info: serial, model, platform, MAC, firmware version, capacity counts
+- Attendance logs through both direct `1501` and prepared-buffer `1503/1504`
+
+Quick test:
+
+```powershell
+javac -encoding UTF-8 -d bin src\zk4370new\*.java
+java -cp bin zk4370new.ZkNewMain 192.168.1.33 4370 111111
+```
+
+Device-side requirements remain the same: TCP port `4370` must be reachable,
+standalone PC communication must be enabled, and the device Comm Key must match
+the password passed to the client.

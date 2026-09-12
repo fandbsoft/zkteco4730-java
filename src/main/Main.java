@@ -30,7 +30,7 @@ public class Main {
 		System.out.println("================================================================================");
 
 		// Kiểm thử thiết bị 1: Ronald Jack DG 600BID (Firmware 2017)
-		testDevice("MÁY 1: RONALD JACK DG 600BID", "192.168.1.39", ZkConstants.DEFAULT_PORT, 111111);
+//		testDevice("MÁY 1: RONALD JACK DG 600BID", "192.168.1.39", ZkConstants.DEFAULT_PORT, 111111);
 
 		System.out.println("\n\n");
 
