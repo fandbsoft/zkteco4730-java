@@ -6,7 +6,7 @@ import java.time.ZoneId;
 /**
  * Attendance transaction record returned by a ZKTeco terminal.
  */
-public final class AttendanceLog {
+public final class ZKTeco4370_AttendanceLog {
 	private final String userId;
 	private final int uid;
 	private final LocalDateTime timestamp;
@@ -15,7 +15,7 @@ public final class AttendanceLog {
 	private final int workCode;
 	private final int recordSize;
 
-	public AttendanceLog(String userId, int uid, LocalDateTime timestamp,
+	public ZKTeco4370_AttendanceLog(String userId, int uid, LocalDateTime timestamp,
 			int verifyMode, int inOutMode, int workCode, int recordSize) {
 		this.userId = userId != null ? userId.trim() : "";
 		this.uid = uid;
@@ -26,7 +26,7 @@ public final class AttendanceLog {
 		this.recordSize = recordSize;
 	}
 
-	public AttendanceLog(String userId, LocalDateTime timestamp, int verifyMode, int inOutMode, int workCode) {
+	public ZKTeco4370_AttendanceLog(String userId, LocalDateTime timestamp, int verifyMode, int inOutMode, int workCode) {
 		this(userId, parseUid(userId), timestamp, verifyMode, inOutMode, workCode, 40);
 	}
 
@@ -81,7 +81,7 @@ public final class AttendanceLog {
 
 	@Override
 	public String toString() {
-		return "AttendanceLog{" +
+		return "ZKTeco4370_AttendanceLog{" +
 				"userId='" + userId + '\'' +
 				", uid=" + uid +
 				", timestamp=" + timestamp +

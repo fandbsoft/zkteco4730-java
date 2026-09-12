@@ -25,7 +25,7 @@ import java.util.function.Consumer;
  * firmware, then exposes one compact API for device info, users, attendance
  * logs, range filtering, and door unlock.
  */
-public class ZkClient implements AutoCloseable {
+public class ZKTeco4370_ZkClient implements AutoCloseable {
 	private final String host;
 	private final int port;
 	private final int password;
@@ -42,24 +42,24 @@ public class ZkClient implements AutoCloseable {
 	private byte[] aesKey;
 	private boolean connected;
 	private boolean closed = true;
-	private ProtocolMode protocolMode = ProtocolMode.UNKNOWN;
-	private List<AttendanceLog> attendanceLogCache;
+	private ZKTeco4370_ProtocolMode protocolMode = ZKTeco4370_ProtocolMode.UNKNOWN;
+	private List<ZKTeco4370_AttendanceLog> attendanceLogCache;
 	private boolean attendanceLogCacheEnabled;
 	private boolean bulkReadSinceConnect;
 
-	public ZkClient(String host, int port, int password) {
-		this(host, port, password, ZkConstants.DEFAULT_CONNECT_TIMEOUT_MS, ZkConstants.DEFAULT_READ_TIMEOUT_MS);
+	public ZKTeco4370_ZkClient(String host, int port, int password) {
+		this(host, port, password, ZKTeco4370_ZkConstants.DEFAULT_CONNECT_TIMEOUT_MS, ZKTeco4370_ZkConstants.DEFAULT_READ_TIMEOUT_MS);
 	}
 
-	public ZkClient(String host, int password) {
-		this(host, ZkConstants.DEFAULT_PORT, password);
+	public ZKTeco4370_ZkClient(String host, int password) {
+		this(host, ZKTeco4370_ZkConstants.DEFAULT_PORT, password);
 	}
 
-	public ZkClient(String host) {
-		this(host, ZkConstants.DEFAULT_PORT, 0);
+	public ZKTeco4370_ZkClient(String host) {
+		this(host, ZKTeco4370_ZkConstants.DEFAULT_PORT, 0);
 	}
 
-	public ZkClient(String host, int port, int password, int connectTimeoutMs, int readTimeoutMs) {
+	public ZKTeco4370_ZkClient(String host, int port, int password, int connectTimeoutMs, int readTimeoutMs) {
 		if (host == null || host.isBlank()) {
 			throw new IllegalArgumentException("Device IP/host must not be blank");
 		}
@@ -80,40 +80,40 @@ public class ZkClient implements AutoCloseable {
 		}
 		openSocket();
 		try {
-			sendPacket(ZkConstants.CMD_CONNECT, new byte[0], false);
-			ZkPacket response = receivePacket();
+			sendPacket(ZKTeco4370_ZkConstants.CMD_CONNECT, new byte[0], false);
+			ZKTeco4370_ZkPacket response = receivePacket();
 			this.sessionId = response.getSessionId();
 
 			int code = response.getCommandId();
-			if (code == ZkConstants.CMD_ACK_OK) {
-				this.protocolMode = ProtocolMode.LEGACY_PULL;
+			if (code == ZKTeco4370_ZkConstants.CMD_ACK_OK) {
+				this.protocolMode = ZKTeco4370_ProtocolMode.LEGACY_PULL;
 				this.connected = true;
 				return;
 			}
-			if (code == ZkConstants.CMD_ACK_UNAUTH) {
+			if (code == ZKTeco4370_ZkConstants.CMD_ACK_UNAUTH) {
 				authenticateLegacy();
-				this.protocolMode = ProtocolMode.LEGACY_PULL;
+				this.protocolMode = ZKTeco4370_ProtocolMode.LEGACY_PULL;
 				this.connected = true;
 				return;
 			}
-			if (code == ZkConstants.CMD_ACK_CHALLENGE_6001) {
+			if (code == ZKTeco4370_ZkConstants.CMD_ACK_CHALLENGE_6001) {
 				negotiateSecureSession();
 				authenticateSecureSession();
-				this.protocolMode = ProtocolMode.SECURE_PULL;
+				this.protocolMode = ZKTeco4370_ProtocolMode.SECURE_PULL;
 				this.connected = true;
 				return;
 			}
-			if (code == ZkConstants.CMD_ACK_AUTH_LOCK) {
-				throw new ZkException("Device requires secure/standalone pull authentication but did not issue a public-key challenge", code);
+			if (code == ZKTeco4370_ZkConstants.CMD_ACK_AUTH_LOCK) {
+				throw new ZKTeco4370_ZkException("Device requires secure/standalone pull authentication but did not issue a public-key challenge", code);
 			}
-			throw new ZkException("Unexpected response to CMD_CONNECT", code);
+			throw new ZKTeco4370_ZkException("Unexpected response to CMD_CONNECT", code);
 		} catch (IOException | RuntimeException ex) {
 			closeSocketOnly();
 			throw ex;
 		}
 	}
 
-	public synchronized DeviceInfo getDeviceInfo() throws IOException {
+	public synchronized ZKTeco4370_DeviceInfo getDeviceInfo() throws IOException {
 		ensureConnected();
 		String serialNumber = getDeviceOption("~SerialNumber");
 		String deviceModel = firstNonBlank(getDeviceOption("~DeviceName"), getDeviceOption("DeviceName"));
@@ -122,15 +122,15 @@ public class ZkClient implements AutoCloseable {
 		String firmwareVersion = firstNonBlank(getFirmwareVersion(), getDeviceOption("~Firmware"));
 
 		int[] sizes = readSizes();
-		return new DeviceInfo(serialNumber, firmwareVersion, platform, macAddress, deviceModel,
+		return new ZKTeco4370_DeviceInfo(serialNumber, firmwareVersion, platform, macAddress, deviceModel,
 				sizes[0], sizes[1], sizes[3], sizes[2], protocolMode);
 	}
 
-	public synchronized List<UserInfo> getAllUser() throws IOException {
+	public synchronized List<ZKTeco4370_UserInfo> getAllUser() throws IOException {
 		ensureConnected();
-		List<UserInfo> users = new ArrayList<>();
-		UserParser.StreamingParser parser = UserParser.newStreamingParser(users::add);
-		streamBufferedPayload(buildUserRequest(), "users", new PayloadHandler() {
+		List<ZKTeco4370_UserInfo> users = new ArrayList<>();
+		ZKTeco4370_UserParser.ZKTeco4370_StreamingParser parser = ZKTeco4370_UserParser.newStreamingParser(users::add);
+		streamBufferedPayload(buildUserRequest(), "users", new ZKTeco4370_PayloadHandler() {
 			@Override
 			public void onStart(int totalSize) {
 				parser.start(totalSize);
@@ -149,16 +149,16 @@ public class ZkClient implements AutoCloseable {
 		return enrichUserCreatedAt(users);
 	}
 
-	public synchronized List<UserInfo> getAllUserInfo() throws IOException {
+	public synchronized List<ZKTeco4370_UserInfo> getAllUserInfo() throws IOException {
 		return getAllUser();
 	}
 
-	public synchronized UserInfo getUser(String userId) throws IOException {
+	public synchronized ZKTeco4370_UserInfo getUser(String userId) throws IOException {
 		if (userId == null || userId.isBlank()) {
 			return null;
 		}
 		String target = userId.trim();
-		for (UserInfo user : getAllUser()) {
+		for (ZKTeco4370_UserInfo user : getAllUser()) {
 			if (target.equalsIgnoreCase(user.getUserId())) {
 				return user;
 			}
@@ -166,11 +166,11 @@ public class ZkClient implements AutoCloseable {
 		return null;
 	}
 
-	public synchronized List<AttendanceLog> getAllLog() throws IOException {
+	public synchronized List<ZKTeco4370_AttendanceLog> getAllLog() throws IOException {
 		if (attendanceLogCacheEnabled && attendanceLogCache != null) {
 			return new ArrayList<>(attendanceLogCache);
 		}
-		List<AttendanceLog> logs = new ArrayList<>();
+		List<ZKTeco4370_AttendanceLog> logs = new ArrayList<>();
 		streamAllLog(logs::add);
 		if (attendanceLogCacheEnabled) {
 			attendanceLogCache = new ArrayList<>(logs);
@@ -178,19 +178,19 @@ public class ZkClient implements AutoCloseable {
 		return logs;
 	}
 
-	public synchronized List<AttendanceLog> getAttendanceLogs() throws IOException {
+	public synchronized List<ZKTeco4370_AttendanceLog> getAttendanceLogs() throws IOException {
 		return getAllLog();
 	}
 
-	public synchronized List<AttendanceLog> getLogAt(long start, long end) throws IOException {
+	public synchronized List<ZKTeco4370_AttendanceLog> getLogAt(long start, long end) throws IOException {
 		if (attendanceLogCacheEnabled && attendanceLogCache != null) {
 			long startMillis = start <= 0 ? Long.MIN_VALUE : toEpochMillis(start);
 			long endMillis = end <= 0 ? Long.MAX_VALUE : toEpochMillis(end);
 			long min = Math.min(startMillis, endMillis);
 			long max = Math.max(startMillis, endMillis);
 
-			List<AttendanceLog> result = new ArrayList<>();
-			for (AttendanceLog log : attendanceLogCache) {
+			List<ZKTeco4370_AttendanceLog> result = new ArrayList<>();
+			for (ZKTeco4370_AttendanceLog log : attendanceLogCache) {
 				long timestamp = log.getTimestampEpochMilli();
 				if (timestamp > 0 && timestamp >= min && timestamp <= max) {
 					result.add(log);
@@ -199,16 +199,16 @@ public class ZkClient implements AutoCloseable {
 			return result;
 		}
 
-		List<AttendanceLog> result = new ArrayList<>();
+		List<ZKTeco4370_AttendanceLog> result = new ArrayList<>();
 		streamLogAt(start, end, result::add);
 		return result;
 	}
 
-	public synchronized void streamAllLog(Consumer<AttendanceLog> consumer) throws IOException {
+	public synchronized void streamAllLog(Consumer<ZKTeco4370_AttendanceLog> consumer) throws IOException {
 		Objects.requireNonNull(consumer, "Attendance log consumer must not be null");
 		ensureConnected();
-		RecordParser.StreamingParser parser = RecordParser.newStreamingParser(consumer);
-		streamBufferedPayload(buildAttendanceLogRequest(), "attendance logs", new PayloadHandler() {
+		ZKTeco4370_RecordParser.ZKTeco4370_StreamingParser parser = ZKTeco4370_RecordParser.newStreamingParser(consumer);
+		streamBufferedPayload(buildAttendanceLogRequest(), "attendance logs", new ZKTeco4370_PayloadHandler() {
 			@Override
 			public void onStart(int totalSize) {
 				parser.start(totalSize);
@@ -226,7 +226,7 @@ public class ZkClient implements AutoCloseable {
 		});
 	}
 
-	public synchronized void streamLogAt(long start, long end, Consumer<AttendanceLog> consumer) throws IOException {
+	public synchronized void streamLogAt(long start, long end, Consumer<ZKTeco4370_AttendanceLog> consumer) throws IOException {
 		Objects.requireNonNull(consumer, "Attendance log consumer must not be null");
 		long startMillis = start <= 0 ? Long.MIN_VALUE : toEpochMillis(start);
 		long endMillis = end <= 0 ? Long.MAX_VALUE : toEpochMillis(end);
@@ -243,7 +243,7 @@ public class ZkClient implements AutoCloseable {
 
 	public synchronized boolean unlock(int delaySeconds) throws IOException {
 		ensureConnected();
-		if (protocolMode == ProtocolMode.SECURE_PULL && bulkReadSinceConnect) {
+		if (protocolMode == ZKTeco4370_ProtocolMode.SECURE_PULL && bulkReadSinceConnect) {
 			reconnectPreservingCache();
 		}
 		return unlockOnce(delaySeconds);
@@ -253,8 +253,8 @@ public class ZkClient implements AutoCloseable {
 		int delay = Math.max(1, delaySeconds);
 		byte[] payload = new byte[4];
 		writeInt32LE(payload, 0, delay);
-		sendPacket(ZkConstants.CMD_UNLOCK, payload);
-		ZkPacket response = receivePacket();
+		sendPacket(ZKTeco4370_ZkConstants.CMD_UNLOCK, payload);
+		ZKTeco4370_ZkPacket response = receivePacket();
 		return response.isOk();
 	}
 
@@ -263,14 +263,14 @@ public class ZkClient implements AutoCloseable {
 	}
 
 	public synchronized boolean unlock() throws IOException {
-		return unlock(ZkConstants.DEFAULT_UNLOCK_DELAY_SECONDS);
+		return unlock(ZKTeco4370_ZkConstants.DEFAULT_UNLOCK_DELAY_SECONDS);
 	}
 
 	public synchronized String getDeviceOption(String key) throws IOException {
 		ensureConnected();
 		byte[] payload = ((key != null ? key : "") + "\0").getBytes(StandardCharsets.US_ASCII);
-		sendPacket(ZkConstants.CMD_OPTIONS_RRQ, payload);
-		ZkPacket response = receivePacket();
+		sendPacket(ZKTeco4370_ZkConstants.CMD_OPTIONS_RRQ, payload);
+		ZKTeco4370_ZkPacket response = receivePacket();
 		if (response.getPayloadLength() == 0) {
 			return "";
 		}
@@ -283,8 +283,8 @@ public class ZkClient implements AutoCloseable {
 
 	public synchronized String getFirmwareVersion() throws IOException {
 		ensureConnected();
-		sendPacket(ZkConstants.CMD_VERSION, new byte[0]);
-		ZkPacket response = receivePacket();
+		sendPacket(ZKTeco4370_ZkConstants.CMD_VERSION, new byte[0]);
+		ZKTeco4370_ZkPacket response = receivePacket();
 		if (response.getPayloadLength() > 0 && (response.isOk() || response.isData())) {
 			return new String(response.payloadView(), StandardCharsets.US_ASCII).replace("\0", "").trim();
 		}
@@ -299,7 +299,7 @@ public class ZkClient implements AutoCloseable {
 		return attendanceLogCacheEnabled;
 	}
 
-	public synchronized ZkClient setAttendanceLogCacheEnabled(boolean enabled) {
+	public synchronized ZKTeco4370_ZkClient setAttendanceLogCacheEnabled(boolean enabled) {
 		this.attendanceLogCacheEnabled = enabled;
 		if (!enabled) {
 			clearCache();
@@ -311,7 +311,7 @@ public class ZkClient implements AutoCloseable {
 		return connected && socket != null && !socket.isClosed() && !closed;
 	}
 
-	public ProtocolMode getProtocolMode() {
+	public ZKTeco4370_ProtocolMode getProtocolMode() {
 		return protocolMode;
 	}
 
@@ -333,7 +333,7 @@ public class ZkClient implements AutoCloseable {
 		this.connected = false;
 		this.secureMode = false;
 		this.aesKey = null;
-		this.protocolMode = ProtocolMode.UNKNOWN;
+		this.protocolMode = ZKTeco4370_ProtocolMode.UNKNOWN;
 		this.attendanceLogCache = null;
 		this.bulkReadSinceConnect = false;
 		this.sessionId = 0;
@@ -351,100 +351,100 @@ public class ZkClient implements AutoCloseable {
 		int[] ticks = { 50, 0 };
 		int lastCode = -1;
 		for (int tick : ticks) {
-			sendPacket(ZkConstants.CMD_AUTH, ZkCrypto.makeCommKey(password, sessionId, tick), false);
-			ZkPacket response = receivePacket();
+			sendPacket(ZKTeco4370_ZkConstants.CMD_AUTH, ZKTeco4370_ZkCrypto.makeCommKey(password, sessionId, tick), false);
+			ZKTeco4370_ZkPacket response = receivePacket();
 			if (response.isOk()) {
 				return;
 			}
 			lastCode = response.getCommandId();
 			if (response.isAuthChallenge() || response.isAuthLock()) {
-				throw new ZkException("Legacy authentication rejected by secure firmware", lastCode);
+				throw new ZKTeco4370_ZkException("Legacy authentication rejected by secure firmware", lastCode);
 			}
 		}
-		throw new ZkException("Legacy Comm Key authentication failed", lastCode);
+		throw new ZKTeco4370_ZkException("Legacy Comm Key authentication failed", lastCode);
 	}
 
 	private void negotiateSecureSession() throws IOException {
 		try {
-			KeyPair clientKeyPair = ZkCrypto.generateClientRsaKeyPair();
-			String clientPem = ZkCrypto.toPkcs1PublicPem((RSAPublicKey) clientKeyPair.getPublic());
-			byte[] clientDmc = ZkCrypto.buildDmcPayload(3, clientPem.getBytes(StandardCharsets.US_ASCII));
+			KeyPair clientKeyPair = ZKTeco4370_ZkCrypto.generateClientRsaKeyPair();
+			String clientPem = ZKTeco4370_ZkCrypto.toPkcs1PublicPem((RSAPublicKey) clientKeyPair.getPublic());
+			byte[] clientDmc = ZKTeco4370_ZkCrypto.buildDmcPayload(3, clientPem.getBytes(StandardCharsets.US_ASCII));
 
-			sendPacket(ZkConstants.CMD_CRYPTO_DMC_EXCHANGE, clientDmc, false);
-			ZkPacket publicKeyResponse = receivePacket();
+			sendPacket(ZKTeco4370_ZkConstants.CMD_CRYPTO_DMC_EXCHANGE, clientDmc, false);
+			ZKTeco4370_ZkPacket publicKeyResponse = receivePacket();
 			if (!publicKeyResponse.isOk()) {
-				throw new ZkException("Secure public-key exchange failed", publicKeyResponse.getCommandId());
+				throw new ZKTeco4370_ZkException("Secure public-key exchange failed", publicKeyResponse.getCommandId());
 			}
-			ZkCrypto.DmcMessage deviceKeyMessage = ZkCrypto.parseDmcPayload(publicKeyResponse.payloadView());
+			ZKTeco4370_ZkCrypto.ZKTeco4370_DmcMessage deviceKeyMessage = ZKTeco4370_ZkCrypto.parseDmcPayload(publicKeyResponse.payloadView());
 			String devicePem = new String(deviceKeyMessage.getBody(), StandardCharsets.US_ASCII);
-			RSAPublicKey devicePublicKey = ZkCrypto.parsePkcs1PublicPem(devicePem);
+			RSAPublicKey devicePublicKey = ZKTeco4370_ZkCrypto.parsePkcs1PublicPem(devicePem);
 
-			int clientSecret = ZkCrypto.nextClientSecret();
-			byte[] secretPayload = ZkCrypto.buildRsaEncryptedDmcPayload(
-					2, ZkCrypto.int32LE(clientSecret), devicePublicKey);
-			sendPacket(ZkConstants.CMD_CRYPTO_KEY_EXCHANGE, secretPayload, false);
-			ZkPacket secretResponse = receivePacket();
+			int clientSecret = ZKTeco4370_ZkCrypto.nextClientSecret();
+			byte[] secretPayload = ZKTeco4370_ZkCrypto.buildRsaEncryptedDmcPayload(
+					2, ZKTeco4370_ZkCrypto.int32LE(clientSecret), devicePublicKey);
+			sendPacket(ZKTeco4370_ZkConstants.CMD_CRYPTO_KEY_EXCHANGE, secretPayload, false);
+			ZKTeco4370_ZkPacket secretResponse = receivePacket();
 			if (!secretResponse.isOk()) {
-				throw new ZkException("Secure session-key exchange failed", secretResponse.getCommandId());
+				throw new ZKTeco4370_ZkException("Secure session-key exchange failed", secretResponse.getCommandId());
 			}
-			ZkCrypto.DmcMessage serverSecretMessage = ZkCrypto.parseRsaEncryptedDmcPayload(
+			ZKTeco4370_ZkCrypto.ZKTeco4370_DmcMessage serverSecretMessage = ZKTeco4370_ZkCrypto.parseRsaEncryptedDmcPayload(
 					secretResponse.payloadView(), clientKeyPair.getPrivate());
 			byte[] serverSecretBytes = serverSecretMessage.getBody();
 			if (serverSecretBytes.length < 4) {
-				throw new ZkException("Secure session-key response is too short");
+				throw new ZKTeco4370_ZkException("Secure session-key response is too short");
 			}
 			int serverSecret = readInt32LE(serverSecretBytes, 0);
-			this.aesKey = ZkCrypto.deriveAesKey(clientSecret, serverSecret);
+			this.aesKey = ZKTeco4370_ZkCrypto.deriveAesKey(clientSecret, serverSecret);
 
-			sendPacket(ZkConstants.CMD_CRYPTO_CONFIRM_SESSION, new byte[4], false);
-			ZkPacket confirmResponse = receivePacket();
+			sendPacket(ZKTeco4370_ZkConstants.CMD_CRYPTO_CONFIRM_SESSION, new byte[4], false);
+			ZKTeco4370_ZkPacket confirmResponse = receivePacket();
 			if (!confirmResponse.isOk()) {
-				throw new ZkException("Secure session confirmation failed", confirmResponse.getCommandId());
+				throw new ZKTeco4370_ZkException("Secure session confirmation failed", confirmResponse.getCommandId());
 			}
 			this.secureMode = true;
 			sleepQuietly(50);
-		} catch (ZkException e) {
+		} catch (ZKTeco4370_ZkException e) {
 			throw e;
 		} catch (Exception e) {
-			throw new ZkException("Secure handshake failed", e);
+			throw new ZKTeco4370_ZkException("Secure handshake failed", e);
 		}
 	}
 
 	private void authenticateSecureSession() throws IOException {
-		byte[] stage1 = ZkCrypto.makeCommKeyWithCurrentTick(password, sessionId);
-		sendPacket(ZkConstants.CMD_AUTH, stage1, true);
-		ZkPacket stage1Response = receivePacket();
+		byte[] stage1 = ZKTeco4370_ZkCrypto.makeCommKeyWithCurrentTick(password, sessionId);
+		sendPacket(ZKTeco4370_ZkConstants.CMD_AUTH, stage1, true);
+		ZKTeco4370_ZkPacket stage1Response = receivePacket();
 		if (stage1Response.isOk()) {
 			sendSdkBuildMarker();
 			return;
 		}
 		if (stage1Response.isAuthLock()) {
-			throw new ZkException("Secure firmware locked CMD_AUTH", stage1Response.getCommandId());
+			throw new ZKTeco4370_ZkException("Secure firmware locked CMD_AUTH", stage1Response.getCommandId());
 		}
 
-		byte[] stage2 = ZkCrypto.buildExtendedAuthPayload(passwordText);
-		sendPacket(ZkConstants.CMD_AUTH_EXT, stage2, true);
-		ZkPacket stage2Response = receivePacket();
+		byte[] stage2 = ZKTeco4370_ZkCrypto.buildExtendedAuthPayload(passwordText);
+		sendPacket(ZKTeco4370_ZkConstants.CMD_AUTH_EXT, stage2, true);
+		ZKTeco4370_ZkPacket stage2Response = receivePacket();
 		if (!stage2Response.isOk()) {
-			throw new ZkException("Secure Comm Key authentication failed", stage2Response.getCommandId());
+			throw new ZKTeco4370_ZkException("Secure Comm Key authentication failed", stage2Response.getCommandId());
 		}
 		sendSdkBuildMarker();
 	}
 
 	private void sendSdkBuildMarker() throws IOException {
-		sendPacket(ZkConstants.CMD_OPTIONS_WRQ, "SDKBuild=1\0".getBytes(StandardCharsets.US_ASCII), true);
-		ZkPacket response = receivePacket();
+		sendPacket(ZKTeco4370_ZkConstants.CMD_OPTIONS_WRQ, "SDKBuild=1\0".getBytes(StandardCharsets.US_ASCII), true);
+		ZKTeco4370_ZkPacket response = receivePacket();
 		if (!response.isOk()) {
-			throw new ZkException("Device rejected SDKBuild marker", response.getCommandId());
+			throw new ZKTeco4370_ZkException("Device rejected SDKBuild marker", response.getCommandId());
 		}
 	}
 
 	private int[] readSizes() throws IOException {
-		sendPacket(ZkConstants.CMD_GET_FREE_SIZES, new byte[0]);
-		ZkPacket response = receivePacket();
+		sendPacket(ZKTeco4370_ZkConstants.CMD_GET_FREE_SIZES, new byte[0]);
+		ZKTeco4370_ZkPacket response = receivePacket();
 		byte[] payload = response.payloadView();
 		if (payload.length < 80) {
-			throw new ZkException("Invalid device size response", response.getCommandId());
+			throw new ZKTeco4370_ZkException("Invalid device size response", response.getCommandId());
 		}
 		int users = readInt32LE(payload, 16);
 		int fingers = readInt32LE(payload, 24);
@@ -453,23 +453,23 @@ public class ZkClient implements AutoCloseable {
 		return new int[] { users, fingers, logs, faces };
 	}
 
-	private interface PayloadHandler {
+	private interface ZKTeco4370_PayloadHandler {
 		void onStart(int totalSize) throws IOException;
 		void onChunk(byte[] data, int offset, int length) throws IOException;
 		void onFinish() throws IOException;
 	}
 
-	private void streamBufferedPayload(byte[] request, String label, PayloadHandler handler) throws IOException {
+	private void streamBufferedPayload(byte[] request, String label, ZKTeco4370_PayloadHandler handler) throws IOException {
 		Objects.requireNonNull(handler, "Payload handler must not be null");
 		ensureBulkReadReady();
 		freeDeviceDataBuffer();
 		boolean releaseDeviceBuffer = false;
 		try {
-			sendPacket(ZkConstants.CMD_DATA_WRRQ, request);
+			sendPacket(ZKTeco4370_ZkConstants.CMD_DATA_WRRQ, request);
 			releaseDeviceBuffer = true;
-			ZkPacket response = receivePacket();
+			ZKTeco4370_ZkPacket response = receivePacket();
 			if (response.isError() || response.isUnauth() || response.isAuthLock()) {
-				throw new ZkException("Device rejected " + label + " read", response.getCommandId());
+				throw new ZKTeco4370_ZkException("Device rejected " + label + " read", response.getCommandId());
 			}
 
 			byte[] payload = response.payloadView();
@@ -502,14 +502,14 @@ public class ZkClient implements AutoCloseable {
 			int offset = 0;
 			int prepareSkips = 0;
 			while (offset < totalSize) {
-				int chunkSize = Math.min(ZkConstants.DEFAULT_BUFFER_CHUNK_SIZE, totalSize - offset);
+				int chunkSize = Math.min(ZKTeco4370_ZkConstants.DEFAULT_BUFFER_CHUNK_SIZE, totalSize - offset);
 				byte[] chunkRequest = new byte[8];
 				writeInt32LE(chunkRequest, 0, offset);
 				writeInt32LE(chunkRequest, 4, chunkSize);
-				sendPacket(ZkConstants.CMD_READ_BUFFER, chunkRequest);
-				ZkPacket chunkResponse = receivePacket();
+				sendPacket(ZKTeco4370_ZkConstants.CMD_READ_BUFFER, chunkRequest);
+				ZKTeco4370_ZkPacket chunkResponse = receivePacket();
 				if (chunkResponse.isError() || chunkResponse.isUnauth() || chunkResponse.isAuthLock()) {
-					throw new ZkException("Device rejected " + label + " buffer chunk", chunkResponse.getCommandId());
+					throw new ZKTeco4370_ZkException("Device rejected " + label + " buffer chunk", chunkResponse.getCommandId());
 				}
 				if (chunkResponse.isPrepareData()) {
 					if (++prepareSkips > 3) {
@@ -538,9 +538,9 @@ public class ZkClient implements AutoCloseable {
 	private static byte[] buildUserRequest() {
 		return new byte[] {
 				1,
-				(byte) (ZkConstants.CMD_USERTEMP_RRQ & 0xFF),
-				(byte) ((ZkConstants.CMD_USERTEMP_RRQ >>> 8) & 0xFF),
-				(byte) ZkConstants.FCT_USER,
+				(byte) (ZKTeco4370_ZkConstants.CMD_USERTEMP_RRQ & 0xFF),
+				(byte) ((ZKTeco4370_ZkConstants.CMD_USERTEMP_RRQ >>> 8) & 0xFF),
+				(byte) ZKTeco4370_ZkConstants.FCT_USER,
 				0, 0, 0, 0, 0, 0, 0
 		};
 	}
@@ -548,8 +548,8 @@ public class ZkClient implements AutoCloseable {
 	private static byte[] buildAttendanceLogRequest() {
 		byte[] request = new byte[11];
 		request[0] = 1;
-		request[1] = (byte) (ZkConstants.CMD_ATTLOG_RRQ & 0xFF);
-		request[2] = (byte) ((ZkConstants.CMD_ATTLOG_RRQ >>> 8) & 0xFF);
+		request[1] = (byte) (ZKTeco4370_ZkConstants.CMD_ATTLOG_RRQ & 0xFF);
+		request[2] = (byte) ((ZKTeco4370_ZkConstants.CMD_ATTLOG_RRQ >>> 8) & 0xFF);
 		return request;
 	}
 
@@ -557,12 +557,12 @@ public class ZkClient implements AutoCloseable {
 		if (totalSize < 0) {
 			throw new IOException("Invalid " + label + " payload size: " + totalSize);
 		}
-		if (totalSize > ZkConstants.MAX_BULK_TRANSFER_SIZE) {
+		if (totalSize > ZKTeco4370_ZkConstants.MAX_BULK_TRANSFER_SIZE) {
 			throw new IOException("Refusing oversized " + label + " payload: " + totalSize + " bytes");
 		}
 	}
 
-	private List<UserInfo> enrichUserCreatedAt(List<UserInfo> users) {
+	private List<ZKTeco4370_UserInfo> enrichUserCreatedAt(List<ZKTeco4370_UserInfo> users) {
 		if (users == null || users.isEmpty()) {
 			return List.of();
 		}
@@ -578,8 +578,8 @@ public class ZkClient implements AutoCloseable {
 				}
 				firstLogByUser.merge(log.getUserId(), log.getTimestamp(), (a, b) -> a.isBefore(b) ? a : b);
 			});
-			List<UserInfo> enriched = new ArrayList<>(users.size());
-			for (UserInfo user : users) {
+			List<ZKTeco4370_UserInfo> enriched = new ArrayList<>(users.size());
+			for (ZKTeco4370_UserInfo user : users) {
 				enriched.add(user.withCreatedAt(firstLogByUser.get(user.getUserId())));
 			}
 			return enriched;
@@ -596,46 +596,46 @@ public class ZkClient implements AutoCloseable {
 		if (out == null || closed) {
 			throw new IOException("Socket is not open");
 		}
-		ZkPacket packet = new ZkPacket(commandId, sessionId, replyId, payload);
+		ZKTeco4370_ZkPacket packet = new ZKTeco4370_ZkPacket(commandId, sessionId, replyId, payload);
 		byte[] frame;
 		if (encrypted) {
 			if (aesKey == null) {
 				throw new IOException("Secure mode requested before AES key is ready");
 			}
 			try {
-				frame = ZkCrypto.encryptSecureTcpFrame(packet.toZkBytes(), aesKey);
+				frame = ZKTeco4370_ZkCrypto.encryptSecureTcpFrame(packet.toZkBytes(), aesKey);
 			} catch (Exception e) {
 				throw new IOException("Unable to encrypt secure frame", e);
 			}
 		} else {
-			frame = packet.toTcpFrame(ZkConstants.TCP_MAGIC);
+			frame = packet.toTcpFrame(ZKTeco4370_ZkConstants.TCP_MAGIC);
 		}
 		out.write(frame);
 		out.flush();
 		replyId = (replyId + 1) & 0xFFFF;
 	}
 
-	private ZkPacket receivePacket() throws IOException {
+	private ZKTeco4370_ZkPacket receivePacket() throws IOException {
 		if (in == null || closed) {
 			throw new IOException("Socket is not open");
 		}
-		byte[] tcpHeader = new byte[ZkConstants.TCP_HEADER_SIZE];
+		byte[] tcpHeader = new byte[ZKTeco4370_ZkConstants.TCP_HEADER_SIZE];
 		int magic = readTcpHeader(in, tcpHeader);
 		int payloadLength = readInt32LE(tcpHeader, 4);
-		if (payloadLength < ZkConstants.ZK_HEADER_SIZE || payloadLength > ZkConstants.MAX_FRAME_PAYLOAD_SIZE) {
+		if (payloadLength < ZKTeco4370_ZkConstants.ZK_HEADER_SIZE || payloadLength > ZKTeco4370_ZkConstants.MAX_FRAME_PAYLOAD_SIZE) {
 			throw new IOException("Invalid packet length: " + payloadLength);
 		}
 		byte[] payload = new byte[payloadLength];
 		readFully(in, payload, 0, payloadLength);
 		byte[] zkBytes = payload;
-		if (magic == ZkConstants.TCP_MAGIC_ALT) {
+		if (magic == ZKTeco4370_ZkConstants.TCP_MAGIC_ALT) {
 			try {
-				zkBytes = ZkCrypto.decryptSecurePayload(payload, aesKey);
+				zkBytes = ZKTeco4370_ZkCrypto.decryptSecurePayload(payload, aesKey);
 			} catch (Exception e) {
 				throw new IOException("Unable to decrypt secure frame", e);
 			}
 		}
-		return ZkPacket.parseZkBytes(zkBytes, 0, zkBytes.length);
+		return ZKTeco4370_ZkPacket.parseZkBytes(zkBytes, 0, zkBytes.length);
 	}
 
 	private void ensureConnected() throws IOException {
@@ -646,13 +646,13 @@ public class ZkClient implements AutoCloseable {
 
 	private void ensureBulkReadReady() throws IOException {
 		ensureConnected();
-		if (protocolMode == ProtocolMode.SECURE_PULL && bulkReadSinceConnect) {
+		if (protocolMode == ZKTeco4370_ProtocolMode.SECURE_PULL && bulkReadSinceConnect) {
 			reconnectPreservingCache();
 		}
 	}
 
 	private void reconnectPreservingCache() throws IOException {
-		List<AttendanceLog> cachedLogs = attendanceLogCache;
+		List<ZKTeco4370_AttendanceLog> cachedLogs = attendanceLogCache;
 		close();
 		connect();
 		attendanceLogCache = cachedLogs;
@@ -660,7 +660,7 @@ public class ZkClient implements AutoCloseable {
 
 	private void freeDeviceDataBuffer() {
 		try {
-			sendPacket(ZkConstants.CMD_FREE_DATA, new byte[0]);
+			sendPacket(ZKTeco4370_ZkConstants.CMD_FREE_DATA, new byte[0]);
 			receivePacket();
 		} catch (Exception ignored) {
 		}
@@ -758,7 +758,7 @@ public class ZkClient implements AutoCloseable {
 		if (connected && socket != null && !socket.isClosed()) {
 			try {
 				socket.setSoTimeout(1000);
-				sendPacket(ZkConstants.CMD_EXIT, new byte[0], secureMode);
+				sendPacket(ZKTeco4370_ZkConstants.CMD_EXIT, new byte[0], secureMode);
 			} catch (Exception ignored) {
 			}
 		}

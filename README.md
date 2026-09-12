@@ -20,7 +20,7 @@ The old `main.zk` and `zk4370new` packages have been merged and removed.
 - Legacy/standard ZKTeco pull protocol.
 - Secure pull protocol used by newer SenseFace/Linux firmware that answers
   `CMD_CONNECT` with `6001`.
-- Automatic protocol detection inside one `ZkClient` instance.
+- Automatic protocol detection inside one `ZKTeco4370_ZkClient` instance.
 
 The public workflow follows ZKTeco standalone communication behavior documented
 for PC Connection / Comm Key: device info, employee synchronization, transaction
@@ -53,16 +53,16 @@ java -cp bin main.Main 192.168.1.33 4370 111111
 ```java
 import java.util.List;
 
-import zkteco.AttendanceLog;
-import zkteco.DeviceInfo;
-import zkteco.UserInfo;
-import zkteco.ZkClient;
+import zkteco.ZKTeco4370_AttendanceLog;
+import zkteco.ZKTeco4370_DeviceInfo;
+import zkteco.ZKTeco4370_UserInfo;
+import zkteco.ZKTeco4370_ZkClient;
 
-try (ZkClient zk = new ZkClient("192.168.1.33", 4370, 111111)) {
-    DeviceInfo device = zk.getDeviceInfo();
-    List<UserInfo> users = zk.getAllUser();
-    List<AttendanceLog> allLogs = zk.getAllLog();
-    List<AttendanceLog> rangedLogs = zk.getLogAt(start, end);
+try (ZKTeco4370_ZkClient zk = new ZKTeco4370_ZkClient("192.168.1.33", 4370, 111111)) {
+    ZKTeco4370_DeviceInfo device = zk.getDeviceInfo();
+    List<ZKTeco4370_UserInfo> users = zk.getAllUser();
+    List<ZKTeco4370_AttendanceLog> allLogs = zk.getAllLog();
+    List<ZKTeco4370_AttendanceLog> rangedLogs = zk.getLogAt(start, end);
     boolean unlocked = zk.unlock(5);
 }
 ```
@@ -74,4 +74,4 @@ remains `null`.
 
 Device-side requirements: TCP port `4370` must be reachable, standalone PC
 communication must be enabled, and the device Comm Key must match the password
-passed to `ZkClient`.
+passed to `ZKTeco4370_ZkClient`.

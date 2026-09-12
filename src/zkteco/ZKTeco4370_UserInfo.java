@@ -6,18 +6,18 @@ import java.time.ZoneId;
 /**
  * User record returned by a ZKTeco terminal.
  */
-public final class UserInfo {
+public final class ZKTeco4370_UserInfo {
 	private final String userId;
 	private final String name;
 	private final LocalDateTime createdAt;
 	private final int privilege;
 	private final boolean enabled;
 
-	public UserInfo(String userId, String name, LocalDateTime createdAt) {
+	public ZKTeco4370_UserInfo(String userId, String name, LocalDateTime createdAt) {
 		this(userId, name, createdAt, 0, true);
 	}
 
-	public UserInfo(String userId, String name, LocalDateTime createdAt, int privilege, boolean enabled) {
+	public ZKTeco4370_UserInfo(String userId, String name, LocalDateTime createdAt, int privilege, boolean enabled) {
 		this.userId = userId != null ? userId.trim() : "";
 		this.name = name != null ? name.trim() : "";
 		this.createdAt = createdAt;
@@ -39,13 +39,13 @@ public final class UserInfo {
 		return createdAt != null ? createdAt.atZone(ZoneId.systemDefault()).toEpochSecond() : 0L;
 	}
 
-	UserInfo withCreatedAt(LocalDateTime value) {
-		return new UserInfo(userId, name, value, privilege, enabled);
+	ZKTeco4370_UserInfo withCreatedAt(LocalDateTime value) {
+		return new ZKTeco4370_UserInfo(userId, name, value, privilege, enabled);
 	}
 
 	@Override
 	public String toString() {
-		return "UserInfo{" +
+		return "ZKTeco4370_UserInfo{" +
 				"userId='" + userId + '\'' +
 				", name='" + name + '\'' +
 				", createdAt=" + createdAt +

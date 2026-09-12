@@ -5,22 +5,22 @@ import java.io.IOException;
 /**
  * Checked exception for ZKTeco socket protocol failures.
  */
-public class ZkException extends IOException {
+public class ZKTeco4370_ZkException extends IOException {
 	private static final long serialVersionUID = 1L;
 
 	private final int responseCode;
 
-	public ZkException(String message) {
+	public ZKTeco4370_ZkException(String message) {
 		super(message);
 		this.responseCode = -1;
 	}
 
-	public ZkException(String message, int responseCode) {
+	public ZKTeco4370_ZkException(String message, int responseCode) {
 		super(message + " (response=" + responseCode + ")");
 		this.responseCode = responseCode;
 	}
 
-	public ZkException(String message, Throwable cause) {
+	public ZKTeco4370_ZkException(String message, Throwable cause) {
 		super(message, cause);
 		this.responseCode = -1;
 	}

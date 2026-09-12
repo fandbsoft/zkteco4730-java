@@ -2,8 +2,8 @@ package zkteco;
 
 import java.time.LocalDateTime;
 
-final class TimeCodec {
-	private TimeCodec() {}
+final class ZKTeco4370_TimeCodec {
+	private ZKTeco4370_TimeCodec() {}
 
 	static LocalDateTime decodeTime(long rawTime) {
 		if (rawTime <= 0) {

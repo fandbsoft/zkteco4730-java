@@ -7,10 +7,10 @@ import java.util.Collections;
 import java.util.List;
 import java.util.function.Consumer;
 
-final class UserParser {
-	private UserParser() {}
+final class ZKTeco4370_UserParser {
+	private ZKTeco4370_UserParser() {}
 
-	static List<UserInfo> parse(byte[] rawData) {
+	static List<ZKTeco4370_UserInfo> parse(byte[] rawData) {
 		if (rawData == null || rawData.length < 28) {
 			return Collections.emptyList();
 		}
@@ -21,10 +21,10 @@ final class UserParser {
 			return Collections.emptyList();
 		}
 
-		List<UserInfo> users = new ArrayList<>();
+		List<ZKTeco4370_UserInfo> users = new ArrayList<>();
 		int count = remaining / recordSize;
 		for (int i = 0; i < count; i++) {
-			UserInfo user = recordSize == 72
+			ZKTeco4370_UserInfo user = recordSize == 72
 					? parseRecord72(rawData, start + i * recordSize)
 					: parseRecord28(rawData, start + i * recordSize);
 			if (user != null && !user.getUserId().isEmpty()) {
@@ -34,20 +34,20 @@ final class UserParser {
 		return users;
 	}
 
-	static StreamingParser newStreamingParser(Consumer<UserInfo> consumer) {
-		return new StreamingParser(consumer);
+	static ZKTeco4370_StreamingParser newStreamingParser(Consumer<ZKTeco4370_UserInfo> consumer) {
+		return new ZKTeco4370_StreamingParser(consumer);
 	}
 
-	static final class StreamingParser {
+	static final class ZKTeco4370_StreamingParser {
 		private static final byte[] EMPTY = new byte[0];
 
-		private final Consumer<UserInfo> consumer;
+		private final Consumer<ZKTeco4370_UserInfo> consumer;
 		private byte[] pending = EMPTY;
 		private int totalBytes;
 		private int recordSize;
 		private boolean initialized;
 
-		private StreamingParser(Consumer<UserInfo> consumer) {
+		private ZKTeco4370_StreamingParser(Consumer<ZKTeco4370_UserInfo> consumer) {
 			if (consumer == null) {
 				throw new IllegalArgumentException("User consumer must not be null");
 			}
@@ -113,7 +113,7 @@ final class UserParser {
 			if (firstBytes.length < 4 || totalBytes < 32) {
 				return 0;
 			}
-			long header = Integer.toUnsignedLong(RecordParser.readInt32LE(firstBytes, 0));
+			long header = Integer.toUnsignedLong(ZKTeco4370_RecordParser.readInt32LE(firstBytes, 0));
 			long remaining = totalBytes - 4L;
 			if (header > 0 && header <= remaining && (header % 72 == 0 || header % 28 == 0)) {
 				return 4;
@@ -137,7 +137,7 @@ final class UserParser {
 			}
 			int parseBytes = (pending.length / recordSize) * recordSize;
 			for (int offset = 0; offset < parseBytes; offset += recordSize) {
-				UserInfo user = recordSize == 72 ? parseRecord72(pending, offset) : parseRecord28(pending, offset);
+				ZKTeco4370_UserInfo user = recordSize == 72 ? parseRecord72(pending, offset) : parseRecord28(pending, offset);
 				if (user != null && !user.getUserId().isEmpty()) {
 					consumer.accept(user);
 				}
@@ -163,7 +163,7 @@ final class UserParser {
 			}
 			int parseBytes = (remaining / recordSize) * recordSize;
 			for (int current = cursor; current < cursor + parseBytes; current += recordSize) {
-				UserInfo user = recordSize == 72 ? parseRecord72(data, current) : parseRecord28(data, current);
+				ZKTeco4370_UserInfo user = recordSize == 72 ? parseRecord72(data, current) : parseRecord28(data, current);
 				if (user != null && !user.getUserId().isEmpty()) {
 					consumer.accept(user);
 				}
@@ -178,7 +178,7 @@ final class UserParser {
 
 	private static int detectStartOffset(byte[] rawData) {
 		if (rawData.length >= 32) {
-			long header = Integer.toUnsignedLong(RecordParser.readInt32LE(rawData, 0));
+			long header = Integer.toUnsignedLong(ZKTeco4370_RecordParser.readInt32LE(rawData, 0));
 			long remaining = rawData.length - 4L;
 			if (header > 0 && header <= remaining && (header % 72 == 0 || header % 28 == 0)) {
 				return 4;
@@ -197,11 +197,11 @@ final class UserParser {
 		return 0;
 	}
 
-	private static UserInfo parseRecord72(byte[] data, int offset) {
+	private static ZKTeco4370_UserInfo parseRecord72(byte[] data, int offset) {
 		if (offset + 72 > data.length) {
 			return null;
 		}
-		int uid = RecordParser.readUInt16LE(data, offset);
+		int uid = ZKTeco4370_RecordParser.readUInt16LE(data, offset);
 		String name = readNullTerminated(data, offset + 11, 24, StandardCharsets.UTF_8);
 		String pin = readNullTerminated(data, offset + 48, 24, StandardCharsets.US_ASCII);
 		if (pin.isEmpty() && uid > 0) {
@@ -209,18 +209,18 @@ final class UserParser {
 		}
 		int rawPrivilege = data[offset + 2] & 0xFF;
 		int privilege = rawPrivilege == 0x0E ? 3 : rawPrivilege;
-		return new UserInfo(pin, name, null, privilege, true);
+		return new ZKTeco4370_UserInfo(pin, name, null, privilege, true);
 	}
 
-	private static UserInfo parseRecord28(byte[] data, int offset) {
+	private static ZKTeco4370_UserInfo parseRecord28(byte[] data, int offset) {
 		if (offset + 28 > data.length) {
 			return null;
 		}
-		int uid = RecordParser.readUInt16LE(data, offset);
+		int uid = ZKTeco4370_RecordParser.readUInt16LE(data, offset);
 		String name = readNullTerminated(data, offset + 11, 8, StandardCharsets.UTF_8);
 		int rawPrivilege = data[offset + 2] & 0xFF;
 		int privilege = rawPrivilege == 0x0E ? 3 : rawPrivilege;
-		return new UserInfo(String.valueOf(uid), name, null, privilege, true);
+		return new ZKTeco4370_UserInfo(String.valueOf(uid), name, null, privilege, true);
 	}
 
 	private static String readNullTerminated(byte[] data, int offset, int maxLen, java.nio.charset.Charset charset) {

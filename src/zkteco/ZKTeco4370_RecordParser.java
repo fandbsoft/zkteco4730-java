@@ -8,19 +8,19 @@ import java.util.Collections;
 import java.util.List;
 import java.util.function.Consumer;
 
-final class RecordParser {
-	private RecordParser() {}
+final class ZKTeco4370_RecordParser {
+	private ZKTeco4370_RecordParser() {}
 
-	static List<AttendanceLog> parse(byte[] rawData) {
+	static List<ZKTeco4370_AttendanceLog> parse(byte[] rawData) {
 		if (rawData == null || rawData.length < 16) {
 			return Collections.emptyList();
 		}
-		List<AttendanceLog> logs = new ArrayList<>();
+		List<ZKTeco4370_AttendanceLog> logs = new ArrayList<>();
 		parse(rawData, logs::add);
 		return logs;
 	}
 
-	static void parse(byte[] rawData, Consumer<AttendanceLog> consumer) {
+	static void parse(byte[] rawData, Consumer<ZKTeco4370_AttendanceLog> consumer) {
 		if (rawData == null || rawData.length < 16 || consumer == null) {
 			return;
 		}
@@ -29,15 +29,15 @@ final class RecordParser {
 		int recordSize = detectRecordSize(remaining);
 		int count = remaining / recordSize;
 		for (int i = 0; i < count; i++) {
-			AttendanceLog log = parseSingleRecord(rawData, startOffset + i * recordSize, recordSize);
+			ZKTeco4370_AttendanceLog log = parseSingleRecord(rawData, startOffset + i * recordSize, recordSize);
 			if (log != null) {
 				consumer.accept(log);
 			}
 		}
 	}
 
-	static StreamingParser newStreamingParser(Consumer<AttendanceLog> consumer) {
-		return new StreamingParser(consumer);
+	static ZKTeco4370_StreamingParser newStreamingParser(Consumer<ZKTeco4370_AttendanceLog> consumer) {
+		return new ZKTeco4370_StreamingParser(consumer);
 	}
 
 	static int detectRecordSize(int totalBytes) {
@@ -53,16 +53,16 @@ final class RecordParser {
 		return 40;
 	}
 
-	static final class StreamingParser {
+	static final class ZKTeco4370_StreamingParser {
 		private static final byte[] EMPTY = new byte[0];
 
-		private final Consumer<AttendanceLog> consumer;
+		private final Consumer<ZKTeco4370_AttendanceLog> consumer;
 		private byte[] pending = EMPTY;
 		private int totalBytes;
 		private int recordSize;
 		private boolean initialized;
 
-		private StreamingParser(Consumer<AttendanceLog> consumer) {
+		private ZKTeco4370_StreamingParser(Consumer<ZKTeco4370_AttendanceLog> consumer) {
 			if (consumer == null) {
 				throw new IllegalArgumentException("Attendance log consumer must not be null");
 			}
@@ -153,7 +153,7 @@ final class RecordParser {
 			}
 			int parseBytes = (pending.length / recordSize) * recordSize;
 			for (int offset = 0; offset < parseBytes; offset += recordSize) {
-				AttendanceLog log = parseSingleRecord(pending, offset, recordSize);
+				ZKTeco4370_AttendanceLog log = parseSingleRecord(pending, offset, recordSize);
 				if (log != null) {
 					consumer.accept(log);
 				}
@@ -179,7 +179,7 @@ final class RecordParser {
 			}
 			int parseBytes = (remaining / recordSize) * recordSize;
 			for (int current = cursor; current < cursor + parseBytes; current += recordSize) {
-				AttendanceLog log = parseSingleRecord(data, current, recordSize);
+				ZKTeco4370_AttendanceLog log = parseSingleRecord(data, current, recordSize);
 				if (log != null) {
 					consumer.accept(log);
 				}
@@ -205,7 +205,7 @@ final class RecordParser {
 		return 0;
 	}
 
-	private static AttendanceLog parseSingleRecord(byte[] data, int offset, int recordSize) {
+	private static ZKTeco4370_AttendanceLog parseSingleRecord(byte[] data, int offset, int recordSize) {
 		return switch (recordSize) {
 			case 16 -> parseBw16(data, offset);
 			case 36 -> parseTft36(data, offset);
@@ -213,14 +213,14 @@ final class RecordParser {
 		};
 	}
 
-	private static AttendanceLog parseTft40(byte[] d, int o) {
+	private static ZKTeco4370_AttendanceLog parseTft40(byte[] d, int o) {
 		if (o + 40 > d.length) {
 			return null;
 		}
-		AttendanceLog best = null;
+		ZKTeco4370_AttendanceLog best = null;
 		int bestScore = -100;
 
-		AttendanceLog c1 = makeCandidate(readCleanString(d, o + 2, 24), readUInt16LE(d, o),
+		ZKTeco4370_AttendanceLog c1 = makeCandidate(readCleanString(d, o + 2, 24), readUInt16LE(d, o),
 				d[o + 26] & 0xFF, d[o + 31] & 0xFF, readUInt32LE(d, o + 27), readInt32LE(d, o + 32), 40);
 		int s1 = score(c1);
 		if (s1 > bestScore) {
@@ -228,7 +228,7 @@ final class RecordParser {
 			bestScore = s1;
 		}
 
-		AttendanceLog c2 = makeCandidate(readCleanString(d, o, 24), 0,
+		ZKTeco4370_AttendanceLog c2 = makeCandidate(readCleanString(d, o, 24), 0,
 				d[o + 24] & 0xFF, d[o + 25] & 0xFF, readUInt32LE(d, o + 26), readInt32LE(d, o + 30), 40);
 		int s2 = score(c2);
 		if (s2 > bestScore) {
@@ -236,7 +236,7 @@ final class RecordParser {
 			bestScore = s2;
 		}
 
-		AttendanceLog c3 = makeCandidate(readCleanString(d, o + 2, 24), readUInt16LE(d, o),
+		ZKTeco4370_AttendanceLog c3 = makeCandidate(readCleanString(d, o + 2, 24), readUInt16LE(d, o),
 				d[o + 26] & 0xFF, d[o + 27] & 0xFF, readUInt32LE(d, o + 28), readInt32LE(d, o + 32), 40);
 		int s3 = score(c3);
 		if (s3 > bestScore) {
@@ -248,7 +248,7 @@ final class RecordParser {
 		}
 
 		for (int probe = o + 20; probe <= o + 36; probe++) {
-			LocalDateTime time = TimeCodec.decodeTime(readUInt32LE(d, probe));
+			LocalDateTime time = ZKTeco4370_TimeCodec.decodeTime(readUInt32LE(d, probe));
 			if (time != null && time.getYear() >= 2015 && time.getYear() <= 2035) {
 				int uid = readUInt16LE(d, o);
 				String userId = readCleanString(d, o + 2, 24);
@@ -261,13 +261,13 @@ final class RecordParser {
 				int foundAt = probe - o;
 				int verifyMode = foundAt > 24 ? d[o + foundAt - 1] & 0xFF : 0;
 				int inOutMode = foundAt + 4 < 40 ? d[o + foundAt + 4] & 0xFF : 0;
-				return new AttendanceLog(userId, uid, time, verifyMode, inOutMode, 0, 40);
+				return new ZKTeco4370_AttendanceLog(userId, uid, time, verifyMode, inOutMode, 0, 40);
 			}
 		}
 		return null;
 	}
 
-	private static AttendanceLog parseTft36(byte[] d, int o) {
+	private static ZKTeco4370_AttendanceLog parseTft36(byte[] d, int o) {
 		if (o + 36 > d.length) {
 			return null;
 		}
@@ -276,22 +276,22 @@ final class RecordParser {
 		if (userId.isEmpty() && uid > 0) {
 			userId = String.valueOf(uid);
 		}
-		return new AttendanceLog(userId, uid, TimeCodec.decodeTime(readUInt32LE(d, o + 27)),
+		return new ZKTeco4370_AttendanceLog(userId, uid, ZKTeco4370_TimeCodec.decodeTime(readUInt32LE(d, o + 27)),
 				d[o + 26] & 0xFF, d[o + 31] & 0xFF, 0, 36);
 	}
 
-	private static AttendanceLog parseBw16(byte[] d, int o) {
+	private static ZKTeco4370_AttendanceLog parseBw16(byte[] d, int o) {
 		if (o + 16 > d.length) {
 			return null;
 		}
 		int uid = readUInt16LE(d, o);
-		return new AttendanceLog(String.valueOf(uid), uid, TimeCodec.decodeTime(readUInt32LE(d, o + 4)),
+		return new ZKTeco4370_AttendanceLog(String.valueOf(uid), uid, ZKTeco4370_TimeCodec.decodeTime(readUInt32LE(d, o + 4)),
 				d[o + 9] & 0xFF, d[o + 8] & 0xFF, 0, 16);
 	}
 
-	private static AttendanceLog makeCandidate(String userId, int uid, int verifyMode, int inOutMode,
+	private static ZKTeco4370_AttendanceLog makeCandidate(String userId, int uid, int verifyMode, int inOutMode,
 			long rawTime, int workCode, int recordSize) {
-		LocalDateTime time = TimeCodec.decodeTime(rawTime);
+		LocalDateTime time = ZKTeco4370_TimeCodec.decodeTime(rawTime);
 		if (time == null) {
 			return null;
 		}
@@ -299,10 +299,10 @@ final class RecordParser {
 		if (id.isEmpty() && uid > 0) {
 			id = String.valueOf(uid);
 		}
-		return new AttendanceLog(id, uid, time, verifyMode, inOutMode, workCode, recordSize);
+		return new ZKTeco4370_AttendanceLog(id, uid, time, verifyMode, inOutMode, workCode, recordSize);
 	}
 
-	private static int score(AttendanceLog log) {
+	private static int score(ZKTeco4370_AttendanceLog log) {
 		if (log == null || log.getTimestamp() == null) {
 			return -100;
 		}

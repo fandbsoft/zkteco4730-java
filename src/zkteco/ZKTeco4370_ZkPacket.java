@@ -3,22 +3,22 @@ package zkteco;
 /**
  * ZKTeco protocol packet: 8-byte ZK header plus TCP framing.
  */
-final class ZkPacket {
+final class ZKTeco4370_ZkPacket {
 	private final int commandId;
 	private final int checksum;
 	private final int sessionId;
 	private final int replyId;
 	private final byte[] payload;
 
-	ZkPacket(int commandId, int sessionId, int replyId, byte[] payload) {
+	ZKTeco4370_ZkPacket(int commandId, int sessionId, int replyId, byte[] payload) {
 		this(commandId, 0, sessionId, replyId, payload);
 	}
 
-	ZkPacket(int commandId, int checksum, int sessionId, int replyId, byte[] payload) {
+	ZKTeco4370_ZkPacket(int commandId, int checksum, int sessionId, int replyId, byte[] payload) {
 		this(commandId, checksum, sessionId, replyId, payload, false);
 	}
 
-	private ZkPacket(int commandId, int checksum, int sessionId, int replyId, byte[] payload, boolean trustedPayload) {
+	private ZKTeco4370_ZkPacket(int commandId, int checksum, int sessionId, int replyId, byte[] payload, boolean trustedPayload) {
 		this.commandId = commandId & 0xFFFF;
 		this.checksum = checksum & 0xFFFF;
 		this.sessionId = sessionId & 0xFFFF;
@@ -34,16 +34,16 @@ final class ZkPacket {
 	byte[] payloadView() { return payload; }
 	int getPayloadLength() { return payload.length; }
 
-	boolean isOk() { return commandId == ZkConstants.CMD_ACK_OK; }
-	boolean isError() { return commandId == ZkConstants.CMD_ACK_ERROR; }
-	boolean isUnauth() { return commandId == ZkConstants.CMD_ACK_UNAUTH; }
-	boolean isAuthChallenge() { return commandId == ZkConstants.CMD_ACK_CHALLENGE_6001; }
-	boolean isAuthLock() { return commandId == ZkConstants.CMD_ACK_AUTH_LOCK; }
-	boolean isData() { return commandId == ZkConstants.CMD_DATA || commandId == ZkConstants.CMD_ACK_DATA; }
-	boolean isPrepareData() { return commandId == ZkConstants.CMD_PREPARE_DATA; }
+	boolean isOk() { return commandId == ZKTeco4370_ZkConstants.CMD_ACK_OK; }
+	boolean isError() { return commandId == ZKTeco4370_ZkConstants.CMD_ACK_ERROR; }
+	boolean isUnauth() { return commandId == ZKTeco4370_ZkConstants.CMD_ACK_UNAUTH; }
+	boolean isAuthChallenge() { return commandId == ZKTeco4370_ZkConstants.CMD_ACK_CHALLENGE_6001; }
+	boolean isAuthLock() { return commandId == ZKTeco4370_ZkConstants.CMD_ACK_AUTH_LOCK; }
+	boolean isData() { return commandId == ZKTeco4370_ZkConstants.CMD_DATA || commandId == ZKTeco4370_ZkConstants.CMD_ACK_DATA; }
+	boolean isPrepareData() { return commandId == ZKTeco4370_ZkConstants.CMD_PREPARE_DATA; }
 
 	byte[] toZkBytes() {
-		byte[] packet = new byte[ZkConstants.ZK_HEADER_SIZE + payload.length];
+		byte[] packet = new byte[ZKTeco4370_ZkConstants.ZK_HEADER_SIZE + payload.length];
 		packet[0] = (byte) (commandId & 0xFF);
 		packet[1] = (byte) ((commandId >>> 8) & 0xFF);
 		packet[2] = 0;
@@ -53,7 +53,7 @@ final class ZkPacket {
 		packet[6] = (byte) (replyId & 0xFF);
 		packet[7] = (byte) ((replyId >>> 8) & 0xFF);
 		if (payload.length > 0) {
-			System.arraycopy(payload, 0, packet, ZkConstants.ZK_HEADER_SIZE, payload.length);
+			System.arraycopy(payload, 0, packet, ZKTeco4370_ZkConstants.ZK_HEADER_SIZE, payload.length);
 		}
 
 		int calculatedChecksum = calculateChecksum(packet);
@@ -64,8 +64,8 @@ final class ZkPacket {
 
 	byte[] toTcpFrame(int magic) {
 		byte[] zkBytes = toZkBytes();
-		byte[] frame = new byte[ZkConstants.TCP_HEADER_SIZE + zkBytes.length];
-		if (magic == ZkConstants.TCP_MAGIC_ALT) {
+		byte[] frame = new byte[ZKTeco4370_ZkConstants.TCP_HEADER_SIZE + zkBytes.length];
+		if (magic == ZKTeco4370_ZkConstants.TCP_MAGIC_ALT) {
 			frame[0] = 0x50;
 			frame[1] = 0x50;
 			frame[2] = (byte) 0x83;
@@ -77,24 +77,24 @@ final class ZkPacket {
 			frame[3] = 0x7D;
 		}
 		writeInt32LE(frame, 4, zkBytes.length);
-		System.arraycopy(zkBytes, 0, frame, ZkConstants.TCP_HEADER_SIZE, zkBytes.length);
+		System.arraycopy(zkBytes, 0, frame, ZKTeco4370_ZkConstants.TCP_HEADER_SIZE, zkBytes.length);
 		return frame;
 	}
 
-	static ZkPacket parseZkBytes(byte[] raw, int offset, int length) {
-		if (raw == null || length < ZkConstants.ZK_HEADER_SIZE) {
+	static ZKTeco4370_ZkPacket parseZkBytes(byte[] raw, int offset, int length) {
+		if (raw == null || length < ZKTeco4370_ZkConstants.ZK_HEADER_SIZE) {
 			throw new IllegalArgumentException("Invalid ZK packet length: " + length);
 		}
 		int cmd = readUInt16LE(raw, offset);
 		int chk = readUInt16LE(raw, offset + 2);
 		int sess = readUInt16LE(raw, offset + 4);
 		int reply = readUInt16LE(raw, offset + 6);
-		int payloadLength = length - ZkConstants.ZK_HEADER_SIZE;
+		int payloadLength = length - ZKTeco4370_ZkConstants.ZK_HEADER_SIZE;
 		byte[] payload = new byte[payloadLength];
 		if (payloadLength > 0) {
-			System.arraycopy(raw, offset + ZkConstants.ZK_HEADER_SIZE, payload, 0, payloadLength);
+			System.arraycopy(raw, offset + ZKTeco4370_ZkConstants.ZK_HEADER_SIZE, payload, 0, payloadLength);
 		}
-		return new ZkPacket(cmd, chk, sess, reply, payload, true);
+		return new ZKTeco4370_ZkPacket(cmd, chk, sess, reply, payload, true);
 	}
 
 	private static int calculateChecksum(byte[] data) {

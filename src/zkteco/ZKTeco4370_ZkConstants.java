@@ -3,8 +3,8 @@ package zkteco;
 /**
  * Constants for ZKTeco standalone TCP pull communication on port 4370.
  */
-public final class ZkConstants {
-	private ZkConstants() {}
+public final class ZKTeco4370_ZkConstants {
+	private ZKTeco4370_ZkConstants() {}
 
 	public static final int DEFAULT_PORT = 4370;
 	public static final int DEFAULT_CONNECT_TIMEOUT_MS = 10_000;

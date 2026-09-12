@@ -24,8 +24,8 @@ import javax.crypto.spec.SecretKeySpec;
 /**
  * Tiện ích xử lý mã hóa, scrambling Comm Key và phân tích bảo mật cho Firmware mới.
  */
-public final class ZkCrypto {
-	private ZkCrypto() {}
+public final class ZKTeco4370_ZkCrypto {
+	private ZKTeco4370_ZkCrypto() {}
 
 	private static final SecureRandom RANDOM = new SecureRandom();
 	private static final int DMC_CRC_SEED = 0xFFEEBBAA;
@@ -39,11 +39,11 @@ public final class ZkCrypto {
 	private static final byte[] DMC_KEYSTREAM = Base64.getDecoder().decode(
 			"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");
 
-	public static final class DmcMessage {
+	public static final class ZKTeco4370_DmcMessage {
 		private final int type;
 		private final byte[] body;
 
-		private DmcMessage(int type, byte[] body) {
+		private ZKTeco4370_DmcMessage(int type, byte[] body) {
 			this.type = type & 0xFF;
 			this.body = body != null ? body.clone() : new byte[0];
 		}
@@ -195,7 +195,7 @@ public final class ZkCrypto {
 		return Base64.getEncoder().encode(transformed);
 	}
 
-	public static DmcMessage parseDmcPayload(byte[] asciiPayload) throws IOException {
+	public static ZKTeco4370_DmcMessage parseDmcPayload(byte[] asciiPayload) throws IOException {
 		byte[] transformed = Base64.getDecoder().decode(new String(asciiPayload, StandardCharsets.US_ASCII).trim());
 		return parseDmcPlain(dmcTransform(transformed));
 	}
@@ -207,7 +207,7 @@ public final class ZkCrypto {
 		return Base64.getEncoder().encode(encrypted);
 	}
 
-	public static DmcMessage parseRsaEncryptedDmcPayload(byte[] asciiPayload, java.security.PrivateKey privateKey)
+	public static ZKTeco4370_DmcMessage parseRsaEncryptedDmcPayload(byte[] asciiPayload, java.security.PrivateKey privateKey)
 			throws GeneralSecurityException, IOException {
 		byte[] encrypted = Base64.getDecoder().decode(new String(asciiPayload, StandardCharsets.US_ASCII).trim());
 		byte[] plain = rsaPkcs1Crypt(encrypted, privateKey, Cipher.DECRYPT_MODE);
@@ -232,7 +232,7 @@ public final class ZkCrypto {
 				.replace("-----END RSA PUBLIC KEY-----", "")
 				.replaceAll("[^A-Za-z0-9+/=]", "");
 		byte[] der = Base64.getDecoder().decode(base64);
-		DerReader reader = new DerReader(der);
+		ZKTeco4370_DerReader reader = new ZKTeco4370_DerReader(der);
 		reader.expect(0x30);
 		int sequenceLength = reader.readLength();
 		int seqEnd = reader.position() + sequenceLength;
@@ -275,13 +275,13 @@ public final class ZkCrypto {
 		writeInt32LE(inner, 6 + zkBytes.length, crc32Seeded(zkBytes, 0, zkBytes.length));
 
 		byte[] encrypted = aesCbcZeroIv(inner, aesKey, Cipher.ENCRYPT_MODE);
-		byte[] frame = new byte[ZkConstants.TCP_HEADER_SIZE + encrypted.length];
+		byte[] frame = new byte[ZKTeco4370_ZkConstants.TCP_HEADER_SIZE + encrypted.length];
 		frame[0] = 0x50;
 		frame[1] = 0x50;
 		frame[2] = (byte) 0x83;
 		frame[3] = 0x7C;
 		writeInt32LE(frame, 4, encrypted.length);
-		System.arraycopy(encrypted, 0, frame, ZkConstants.TCP_HEADER_SIZE, encrypted.length);
+		System.arraycopy(encrypted, 0, frame, ZKTeco4370_ZkConstants.TCP_HEADER_SIZE, encrypted.length);
 		return frame;
 	}
 
@@ -294,7 +294,7 @@ public final class ZkCrypto {
 			throw new IOException("Secure payload magic không hợp lệ");
 		}
 		int zkLength = readInt32LE(inner, 2);
-		if (zkLength < ZkConstants.ZK_HEADER_SIZE || zkLength + 10 > inner.length) {
+		if (zkLength < ZKTeco4370_ZkConstants.ZK_HEADER_SIZE || zkLength + 10 > inner.length) {
 			throw new IOException("Secure inner ZK length không hợp lệ: " + zkLength);
 		}
 		int expectedCrc = readInt32LE(inner, 6 + zkLength);
@@ -317,7 +317,7 @@ public final class ZkCrypto {
 		return plain;
 	}
 
-	private static DmcMessage parseDmcPlain(byte[] plain) throws IOException {
+	private static ZKTeco4370_DmcMessage parseDmcPlain(byte[] plain) throws IOException {
 		if (plain.length < 9 || plain[0] != (byte) 0xAA || plain[1] != (byte) 0xBB) {
 			throw new IOException("DMC magic không hợp lệ");
 		}
@@ -331,7 +331,7 @@ public final class ZkCrypto {
 		if (expectedCrc != actualCrc) {
 			throw new IOException("DMC CRC không khớp");
 		}
-		return new DmcMessage(type, Arrays.copyOfRange(plain, 5, 5 + length));
+		return new ZKTeco4370_DmcMessage(type, Arrays.copyOfRange(plain, 5, 5 + length));
 	}
 
 	private static byte[] dmcTransform(byte[] input) {
@@ -486,11 +486,11 @@ public final class ZkCrypto {
 		return sb.toString();
 	}
 
-	private static final class DerReader {
+	private static final class ZKTeco4370_DerReader {
 		private final byte[] data;
 		private int pos;
 
-		private DerReader(byte[] data) {
+		private ZKTeco4370_DerReader(byte[] data) {
 			this.data = data;
 		}
 

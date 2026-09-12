@@ -3,7 +3,7 @@ package zkteco;
 /**
  * Immutable device summary returned by a ZKTeco terminal.
  */
-public final class DeviceInfo {
+public final class ZKTeco4370_DeviceInfo {
 	private final String serialNumber;
 	private final String firmwareVersion;
 	private final String platform;
@@ -13,11 +13,11 @@ public final class DeviceInfo {
 	private final int fpCount;
 	private final int faceCount;
 	private final int logCount;
-	private final ProtocolMode protocolMode;
+	private final ZKTeco4370_ProtocolMode protocolMode;
 
-	public DeviceInfo(String serialNumber, String firmwareVersion, String platform,
+	public ZKTeco4370_DeviceInfo(String serialNumber, String firmwareVersion, String platform,
 			String macAddress, String deviceModel, int userCount, int fpCount,
-			int faceCount, int logCount, ProtocolMode protocolMode) {
+			int faceCount, int logCount, ZKTeco4370_ProtocolMode protocolMode) {
 		this.serialNumber = clean(serialNumber);
 		this.firmwareVersion = clean(firmwareVersion);
 		this.platform = clean(platform);
@@ -27,7 +27,7 @@ public final class DeviceInfo {
 		this.fpCount = fpCount;
 		this.faceCount = faceCount;
 		this.logCount = logCount;
-		this.protocolMode = protocolMode != null ? protocolMode : ProtocolMode.UNKNOWN;
+		this.protocolMode = protocolMode != null ? protocolMode : ZKTeco4370_ProtocolMode.UNKNOWN;
 	}
 
 	public String getSerialNumber() { return serialNumber; }
@@ -39,7 +39,7 @@ public final class DeviceInfo {
 	public int getFpCount() { return fpCount; }
 	public int getFaceCount() { return faceCount; }
 	public int getLogCount() { return logCount; }
-	public ProtocolMode getProtocolMode() { return protocolMode; }
+	public ZKTeco4370_ProtocolMode getProtocolMode() { return protocolMode; }
 
 	private static String clean(String value) {
 		return value != null ? value.trim() : "";
@@ -47,7 +47,7 @@ public final class DeviceInfo {
 
 	@Override
 	public String toString() {
-		return "DeviceInfo{" +
+		return "ZKTeco4370_DeviceInfo{" +
 				"serialNumber='" + serialNumber + '\'' +
 				", firmwareVersion='" + firmwareVersion + '\'' +
 				", platform='" + platform + '\'' +
