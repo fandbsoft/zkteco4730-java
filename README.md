@@ -74,7 +74,10 @@ try (ZKTeco4370_ZkClient zk = new ZKTeco4370_ZkClient("192.168.1.33", 4370, 1111
 
 `setDeviceGmtOffsetMinutes` uses the ZKTeco local-time clock model: it sets the
 device wall-clock time to `UTC now + offset`. Tested SenseFace firmware does not
-return a stable timezone ID such as `Asia/Ho_Chi_Minh` over port `4370`.
+return a stable timezone ID such as `Asia/Ho_Chi_Minh` over port `4370`. The
+setter verifies the value by reading the device clock back, and attendance logs
+returned by `ZKTeco4370_ZkClient` are tagged with the inferred device GMT offset
+for epoch conversion.
 
 Note: current public 4370 user records on tested SenseFace firmware do not expose
 a dedicated user creation timestamp. `createdAt` is filled from the first

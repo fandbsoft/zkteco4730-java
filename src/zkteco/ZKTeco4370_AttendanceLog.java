@@ -2,6 +2,7 @@ package zkteco;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 
 /**
  * Attendance transaction record returned by a ZKTeco terminal.
@@ -14,9 +15,15 @@ public final class ZKTeco4370_AttendanceLog {
 	private final int inOutMode;
 	private final int workCode;
 	private final int recordSize;
+	private final Integer deviceGmtOffsetMinutes;
 
 	public ZKTeco4370_AttendanceLog(String userId, int uid, LocalDateTime timestamp,
 			int verifyMode, int inOutMode, int workCode, int recordSize) {
+		this(userId, uid, timestamp, verifyMode, inOutMode, workCode, recordSize, null);
+	}
+
+	private ZKTeco4370_AttendanceLog(String userId, int uid, LocalDateTime timestamp,
+			int verifyMode, int inOutMode, int workCode, int recordSize, Integer deviceGmtOffsetMinutes) {
 		this.userId = userId != null ? userId.trim() : "";
 		this.uid = uid;
 		this.timestamp = timestamp;
@@ -24,6 +31,7 @@ public final class ZKTeco4370_AttendanceLog {
 		this.inOutMode = inOutMode;
 		this.workCode = workCode;
 		this.recordSize = recordSize;
+		this.deviceGmtOffsetMinutes = deviceGmtOffsetMinutes;
 	}
 
 	public ZKTeco4370_AttendanceLog(String userId, LocalDateTime timestamp, int verifyMode, int inOutMode, int workCode) {
@@ -37,13 +45,29 @@ public final class ZKTeco4370_AttendanceLog {
 	public int getInOutMode() { return inOutMode; }
 	public int getWorkCode() { return workCode; }
 	public int getRecordSize() { return recordSize; }
+	public Integer getDeviceGmtOffsetMinutes() { return deviceGmtOffsetMinutes; }
 
 	public long getTimestampEpochMilli() {
-		return timestamp != null ? timestamp.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() : 0L;
+		if (timestamp == null) {
+			return 0L;
+		}
+		return deviceGmtOffsetMinutes != null
+				? timestamp.atOffset(ZoneOffset.ofTotalSeconds(deviceGmtOffsetMinutes * 60)).toInstant().toEpochMilli()
+				: timestamp.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
 	}
 
 	public long getTimestampEpochSecond() {
-		return timestamp != null ? timestamp.atZone(ZoneId.systemDefault()).toEpochSecond() : 0L;
+		if (timestamp == null) {
+			return 0L;
+		}
+		return deviceGmtOffsetMinutes != null
+				? timestamp.atOffset(ZoneOffset.ofTotalSeconds(deviceGmtOffsetMinutes * 60)).toEpochSecond()
+				: timestamp.atZone(ZoneId.systemDefault()).toEpochSecond();
+	}
+
+	ZKTeco4370_AttendanceLog withDeviceGmtOffsetMinutes(int minutes) {
+		ZoneOffset.ofTotalSeconds(minutes * 60);
+		return new ZKTeco4370_AttendanceLog(userId, uid, timestamp, verifyMode, inOutMode, workCode, recordSize, minutes);
 	}
 
 	public String getVerifyModeName() {
@@ -89,6 +113,7 @@ public final class ZKTeco4370_AttendanceLog {
 				", inOutMode=" + inOutMode +
 				", workCode=" + workCode +
 				", recordSize=" + recordSize +
+				", deviceGmtOffsetMinutes=" + deviceGmtOffsetMinutes +
 				'}';
 	}
 }

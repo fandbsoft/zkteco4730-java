@@ -210,7 +210,9 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 	public synchronized void streamAllLog(Consumer<ZKTeco4370_AttendanceLog> consumer) throws IOException {
 		Objects.requireNonNull(consumer, "Attendance log consumer must not be null");
 		ensureConnected();
-		ZKTeco4370_RecordParser.ZKTeco4370_StreamingParser parser = ZKTeco4370_RecordParser.newStreamingParser(consumer);
+		int deviceGmtOffsetMinutes = getDeviceGmtOffsetMinutes();
+		ZKTeco4370_RecordParser.ZKTeco4370_StreamingParser parser = ZKTeco4370_RecordParser.newStreamingParser(
+				log -> consumer.accept(log.withDeviceGmtOffsetMinutes(deviceGmtOffsetMinutes)));
 		streamBufferedPayload(buildAttendanceLogRequest(), "attendance logs", new ZKTeco4370_PayloadHandler() {
 			@Override
 			public void onStart(int totalSize) {
@@ -245,10 +247,7 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 	}
 
 	public synchronized boolean unlock(int delaySeconds) throws IOException {
-		ensureConnected();
-		if (protocolMode == ZKTeco4370_ProtocolMode.SECURE_PULL && bulkReadSinceConnect) {
-			reconnectPreservingCache();
-		}
+		ensureInteractiveCommandReady();
 		return unlockOnce(delaySeconds);
 	}
 
@@ -270,7 +269,7 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 	}
 
 	public synchronized String getDeviceOption(String key) throws IOException {
-		ensureConnected();
+		ensureInteractiveCommandReady();
 		byte[] payload = ((key != null ? key : "") + "\0").getBytes(StandardCharsets.US_ASCII);
 		sendPacket(ZKTeco4370_ZkConstants.CMD_OPTIONS_RRQ, payload);
 		ZKTeco4370_ZkPacket response = receivePacket();
@@ -285,7 +284,7 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 	}
 
 	public synchronized String getFirmwareVersion() throws IOException {
-		ensureConnected();
+		ensureInteractiveCommandReady();
 		sendPacket(ZKTeco4370_ZkConstants.CMD_VERSION, new byte[0]);
 		ZKTeco4370_ZkPacket response = receivePacket();
 		if (response.getPayloadLength() > 0 && (response.isOk() || response.isData())) {
@@ -322,9 +321,23 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 	 */
 	public synchronized void setDeviceGmtOffsetMinutes(int minutes) throws IOException {
 		validateGmtOffsetMinutes(minutes);
-		ZoneOffset offset = ZoneOffset.ofTotalSeconds(minutes * 60);
-		LocalDateTime targetDeviceTime = LocalDateTime.ofInstant(Instant.now(), offset);
-		setDeviceLocalTime(targetDeviceTime);
+		IOException lastFailure = null;
+		for (int attempt = 1; attempt <= 3; attempt++) {
+			try {
+				setDeviceLocalTimeForOffset(minutes);
+				sleepQuietly(300);
+				int actual = getDeviceGmtOffsetMinutes();
+				if (actual == minutes) {
+					return;
+				}
+				lastFailure = new IOException("Device GMT offset verify failed: expected "
+						+ formatGmtOffsetText(minutes) + " but got " + formatGmtOffsetText(actual));
+			} catch (IOException ex) {
+				lastFailure = ex;
+			}
+			sleepQuietly(500);
+		}
+		throw lastFailure != null ? lastFailure : new IOException("Unable to set device GMT offset");
 	}
 
 	/**
@@ -483,6 +496,7 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 	}
 
 	private int[] readSizes() throws IOException {
+		ensureInteractiveCommandReady();
 		sendPacket(ZKTeco4370_ZkConstants.CMD_GET_FREE_SIZES, new byte[0]);
 		ZKTeco4370_ZkPacket response = receivePacket();
 		byte[] payload = response.payloadView();
@@ -497,7 +511,7 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 	}
 
 	private LocalDateTime getDeviceLocalTime() throws IOException {
-		ensureConnected();
+		ensureInteractiveCommandReady();
 		sendPacket(ZKTeco4370_ZkConstants.CMD_GET_TIME, new byte[0]);
 		ZKTeco4370_ZkPacket response = receivePacket();
 		if (!(response.isOk() || response.isData()) || response.getPayloadLength() < 4) {
@@ -514,7 +528,7 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 		if (value == null) {
 			throw new IllegalArgumentException("Device time must not be null");
 		}
-		ensureConnected();
+		ensureInteractiveCommandReady();
 		byte[] payload = new byte[4];
 		writeInt32LE(payload, 0, (int) ZKTeco4370_TimeCodec.encodeTime(value));
 		sendPacket(ZKTeco4370_ZkConstants.CMD_SET_TIME, payload);
@@ -522,6 +536,11 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 		if (!response.isOk()) {
 			throw new ZKTeco4370_ZkException("Device rejected time update", response.getCommandId());
 		}
+	}
+
+	private void setDeviceLocalTimeForOffset(int minutes) throws IOException {
+		ZoneOffset offset = ZoneOffset.ofTotalSeconds(minutes * 60);
+		setDeviceLocalTime(LocalDateTime.ofInstant(Instant.now(), offset));
 	}
 
 	private interface ZKTeco4370_PayloadHandler {
@@ -712,6 +731,13 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 	private void ensureConnected() throws IOException {
 		if (!isConnected()) {
 			connect();
+		}
+	}
+
+	private void ensureInteractiveCommandReady() throws IOException {
+		ensureConnected();
+		if (protocolMode == ZKTeco4370_ProtocolMode.SECURE_PULL && bulkReadSinceConnect) {
+			reconnectPreservingCache();
 		}
 	}
 

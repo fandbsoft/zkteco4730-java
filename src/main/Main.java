@@ -58,21 +58,26 @@ public class Main {
 			System.out.printf("   + Face Count         : %d%n", info.getFaceCount());
 			System.out.printf("   + Log Count          : %d%n", info.getLogCount());
 			int gmtOffsetMinutes = zk.getDeviceGmtOffsetMinutes();
-			System.out.printf("   + GMT Offset         : %s (%d minutes)%n",ZKTeco4370_ZkClient.formatGmtOffsetText(gmtOffsetMinutes), gmtOffsetMinutes);
-			
-			zk.setDeviceGmtOffsetMinutes(10*60+30);
+			System.out.printf("   + GMT Offset         : %s (%d minutes)%n",
+					ZKTeco4370_ZkClient.formatGmtOffsetText(gmtOffsetMinutes), gmtOffsetMinutes);
+			int originalGmtOffsetMinutes = gmtOffsetMinutes;
+			try {
+				zk.setDeviceGmtOffsetMinutes(5*60+30);
+				int verifiedOffsetMinutes = zk.getDeviceGmtOffsetMinutes();
+				System.out.printf("   + GMT Test Set       : %s (%d minutes)%n", ZKTeco4370_ZkClient.formatGmtOffsetText(verifiedOffsetMinutes), verifiedOffsetMinutes);
+			} finally {
+				zk.setDeviceGmtOffsetMinutes(originalGmtOffsetMinutes);
+			}
 			gmtOffsetMinutes = zk.getDeviceGmtOffsetMinutes();
-			System.out.printf("   + GMT Offset         : %s (%d minutes)%n",ZKTeco4370_ZkClient.formatGmtOffsetText(gmtOffsetMinutes), gmtOffsetMinutes);
+			System.out.printf("   + GMT Restored       : %s (%d minutes)%n",
+					ZKTeco4370_ZkClient.formatGmtOffsetText(gmtOffsetMinutes), gmtOffsetMinutes);
 			System.out.println("   => [PASS] ZKTeco4370_DeviceInfo");
 
 			System.out.println("\n>>> [2] Lay danh sach user(userID, name, ngay tao)");
 			List<ZKTeco4370_UserInfo> users = zk.getAllUser();
 			System.out.printf("-> Tim thay %d user:%n", users.size());
-			for (ZKTeco4370_UserInfo user : users) {
-				System.out.printf("   * ID: %-6s | Name: %-16s | CreatedAt: %-20s | Epoch: %-13d | Privilege: %-2d | Enabled: %s%n",
-						user.getUserId(), user.getName(), user.getCreatedAt(), user.getCreatedAtEpochMilli(),
-						user.getPrivilege(), user.isEnabled());
-			}
+			for (ZKTeco4370_UserInfo user : users)
+				System.out.printf("   * ID: %-6s | Name: %-16s | CreatedAt: %-20s | Epoch: %-13d | Privilege: %-2d | Enabled: %s%n", user.getUserId(), user.getName(), user.getCreatedAt(), user.getCreatedAtEpochMilli(), user.getPrivilege(), user.isEnabled());
 			System.out.println("   => [PASS] ZKTeco4370_UserInfo");
 
 			System.out.println("\n>>> [3] Lay tat ca log cham cong");
