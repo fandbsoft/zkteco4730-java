@@ -169,6 +169,23 @@ src/
 
 ---
 
+## 📚 Ghi chú thực nghiệm cho cộng đồng
+
+Trong quá trình xây dựng thư viện này, SDK đã được test trực tiếp với firmware
+SenseFace 2A secure `Ver 6.60 Jan 13 2025` trên TCP `4370`.
+
+Các phát hiện quan trọng đã được ghi lại tại:
+
+- [`docs/FIELD_NOTES_SENSEFACE_2A.md`](docs/FIELD_NOTES_SENSEFACE_2A.md)
+- [`docs/ZKTECO_PROTOCOL_SPECIFICATION.md`](docs/ZKTECO_PROTOCOL_SPECIFICATION.md)
+
+Điểm đáng chú ý nhất: raw `CMD_OPTIONS_WRQ` và cả `zkemkeeper.dll`
+`SetSysOption(...)` có thể ghi/đọc lại các key giống timezone, nhưng không đổi
+timezone UI thật của SenseFace 2A. Vì vậy SDK chỉ cung cấp `getUTC()` để đọc
+UTC offset phục vụ chuyển đổi log, không cung cấp hàm set UTC/GMT offset.
+
+---
+
 ## 📄 Bản quyền (License)
 
 Dự án được phân phối theo giấy phép [MIT License](LICENSE). Bạn hoàn toàn tự do sử dụng, chỉnh sửa và tích hợp vào các dự án phần mềm thương mại hoặc mã nguồn mở.

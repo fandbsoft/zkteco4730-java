@@ -214,7 +214,7 @@ Dữ liệu phản hồi gồm các số nguyên 32-bit Little-Endian tại các
 ## 6. ĐẶC ĐIỂM CÁC DÒNG FIRMWARE MỚI & BẢO MẬT
 
 1. **Phản hồi mã `6001` (`CMD_ACK_CHALLENGE_6001`)**:
-   * Thiết bị đời mới yêu cầu cơ chế bắt tay mã hóa **ZKCommuCrypto** (sử dụng trao đổi khóa công khai ECDH/AES):
+   * Thiết bị đời mới yêu cầu cơ chế bắt tay mã hóa **ZKCommuCrypto**. Trên SenseFace 2A firmware `Ver 6.60 Jan 13 2025`, luồng đã kiểm chứng dùng DMC payload, RSA public-key exchange, sau đó dẫn xuất khóa phiên AES-CBC:
      * `CMD_CRYPTO_DMC_EXCHANGE = 10063` (0x274F)
      * `CMD_CRYPTO_KEY_EXCHANGE = 10064` (0x2750)
      * `CMD_CRYPTO_CONFIRM_SESSION = 10065` (0x2751)
@@ -223,3 +223,9 @@ Dữ liệu phản hồi gồm các số nguyên 32-bit Little-Endian tại các
 3. **Chế độ Cloud Push (ADMS) vs Legacy Pull**:
    * Nhiều thiết bị khi bật chế độ đồng bộ Cloud (ZKBioTime, ZKBioSecurity, ADMS, AC Push) sẽ tự động vô hiệu hóa cổng kết nối kéo trực tiếp 4370.
    * Để sử dụng giao thức 4370: Vào menu thiết bị -> *Thiết lập kết nối (Comm.)* -> *Kết nối PC (PC Connection)* -> Bật chế độ Standalone / Legacy, kiểm tra cổng `4370` và đặt đúng `Comm Key`.
+
+4. **Timezone hệ thống không được expose qua raw 4370 trên SenseFace 2A**:
+   * `CMD_GET_TIME` trả thời gian local của thiết bị; bản ghi chấm công cũng lưu local wall-clock time.
+   * `CMD_OPTIONS_WRQ` có thể ghi/đọc lại các key như `timezone`, `TimeZone`, `GMTOffset`, `UTCOffset`, nhưng các key này không đổi timezone UI thật trên SenseFace 2A secure firmware đã test.
+   * `zkemkeeper.dll` 32-bit bản `6.3.1.55` cũng cho kết quả tương tự với `SetSysOption(...)`: ghi/readback thành công nhưng UI timezone vẫn không đổi.
+   * Vì vậy SDK chỉ suy ra UTC offset bằng `CMD_GET_TIME` để chuyển đổi log; không expose hàm set UTC/GMT offset.
