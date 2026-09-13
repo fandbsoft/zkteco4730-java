@@ -33,8 +33,7 @@ download, and access-control unlock over TCP/IP.
 - All attendance logs.
 - Attendance logs by `long start`, `long end`; accepts epoch milliseconds or
   epoch seconds.
-- Device GMT offset inferred from the device clock, plus setting the device
-  clock to a requested GMT offset.
+- Device UTC offset inferred from the device clock for log epoch conversion.
 - Remote door unlock with `CMD_UNLOCK` / `ACUnlock` command `31`.
 
 ## Quick test
@@ -66,18 +65,17 @@ try (ZKTeco4370_ZkClient zk = new ZKTeco4370_ZkClient("192.168.1.33", 4370, 1111
     List<ZKTeco4370_AttendanceLog> allLogs = zk.getAllLog();
     List<ZKTeco4370_AttendanceLog> rangedLogs = zk.getLogAt(start, end);
     String punchedAt = allLogs.get(0).getTimestampWithGmtOffsetText();
-    int offsetMinutes = zk.getDeviceGmtOffsetMinutes();
-    String offsetText = zk.getDeviceGmtOffsetText(); // e.g. GMT+07:00
-    zk.setDeviceGmtOffsetMinutes(10 * 60 + 30);     // GMT+10:30
+    String utcOffset = zk.getUTC(); // e.g. UTC+07:00
     boolean unlocked = zk.unlock(5);
 }
 ```
 
-`setDeviceGmtOffsetMinutes` uses the ZKTeco local-time clock model: it sets the
-device wall-clock time to `UTC now + offset`. Tested SenseFace firmware does not
-return a stable timezone ID such as `Asia/Ho_Chi_Minh` over port `4370`. The
-setter verifies the value by reading the device clock back, and attendance logs
-returned by `ZKTeco4370_ZkClient` are tagged with the inferred device GMT offset
+`getUTC` is inferred from `CMD_GET_TIME` because the pull
+protocol exposes local wall-clock time, not a reliable system timezone ID. On
+tested SenseFace 2A secure firmware, `CMD_OPTIONS_WRQ` can store arbitrary
+timezone-looking keys but those keys do not change the device UI timezone.
+For that reason the library does not expose a UTC offset setter. Attendance logs
+returned by `ZKTeco4370_ZkClient` are tagged with the inferred device UTC offset
 for epoch conversion.
 
 Note: current public 4370 user records on tested SenseFace firmware do not expose

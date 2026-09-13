@@ -57,11 +57,7 @@ public class Main {
 			System.out.printf("   + Fingerprint Count  : %d%n", info.getFpCount());
 			System.out.printf("   + Face Count         : %d%n", info.getFaceCount());
 			System.out.printf("   + Log Count          : %d%n", info.getLogCount());
-			int gmtOffsetMinutes = zk.getDeviceGmtOffsetMinutes();
-			System.out.printf("   + GMT Offset         : %s (%d minutes)%n", ZKTeco4370_ZkClient.formatGmtOffsetText(gmtOffsetMinutes), gmtOffsetMinutes);
-			zk.setDeviceGmtOffsetMinutes(5*60+30);
-			gmtOffsetMinutes = zk.getDeviceGmtOffsetMinutes();
-			System.out.printf("   + GMT Restored       : %s (%d minutes)%n",ZKTeco4370_ZkClient.formatGmtOffsetText(gmtOffsetMinutes), gmtOffsetMinutes);
+			System.out.printf("   + UTC Offset         : %s%n", zk.getUTC());
 			System.out.println("   => [PASS] ZKTeco4370_DeviceInfo");
 
 			System.out.println("\n>>> [2] Lay danh sach user(userID, name, ngay tao)");

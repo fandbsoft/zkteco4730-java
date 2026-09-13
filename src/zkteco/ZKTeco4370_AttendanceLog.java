@@ -46,7 +46,7 @@ public final class ZKTeco4370_AttendanceLog {
 	public int getInOutMode() { return inOutMode; }
 	public int getWorkCode() { return workCode; }
 	public int getRecordSize() { return recordSize; }
-	public Integer getDeviceGmtOffsetMinutes() { return deviceGmtOffsetMinutes; }
+	public String getUTC() { return formatUtcOffsetText(resolveGmtOffsetMinutes()); }
 
 	public OffsetDateTime getTimestampWithGmtOffset() {
 		if (timestamp == null) {
@@ -96,6 +96,11 @@ public final class ZKTeco4370_AttendanceLog {
 	private static String formatGmtOffsetText(int minutes) {
 		int absolute = Math.abs(minutes);
 		return String.format("GMT%s%02d:%02d", minutes >= 0 ? "+" : "-", absolute / 60, absolute % 60);
+	}
+
+	private static String formatUtcOffsetText(int minutes) {
+		int absolute = Math.abs(minutes);
+		return String.format("UTC%s%02d:%02d", minutes >= 0 ? "+" : "-", absolute / 60, absolute % 60);
 	}
 
 	public String getVerifyModeName() {

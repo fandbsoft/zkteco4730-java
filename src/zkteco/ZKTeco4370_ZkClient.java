@@ -210,7 +210,7 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 	public synchronized void streamAllLog(Consumer<ZKTeco4370_AttendanceLog> consumer) throws IOException {
 		Objects.requireNonNull(consumer, "Attendance log consumer must not be null");
 		ensureConnected();
-		int deviceGmtOffsetMinutes = getDeviceGmtOffsetMinutes();
+		int deviceGmtOffsetMinutes = inferDeviceUtcOffsetMinutesFromClock();
 		ZKTeco4370_RecordParser.ZKTeco4370_StreamingParser parser = ZKTeco4370_RecordParser.newStreamingParser(
 				log -> consumer.accept(log.withDeviceGmtOffsetMinutes(deviceGmtOffsetMinutes)));
 		streamBufferedPayload(buildAttendanceLogRequest(), "attendance logs", new ZKTeco4370_PayloadHandler() {
@@ -294,57 +294,19 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 	}
 
 	/**
-	 * Returns the device GMT offset in minutes, inferred from CMD_GET_TIME.
+	 * Returns the device UTC offset text.
 	 * <p>
-	 * ZKTeco pull devices usually expose local wall-clock time instead of a stable
-	 * timezone ID. The result is rounded to the nearest 15-minute offset.
+	 * ZKTeco pull protocol exposes the device wall-clock time, not a reliable
+	 * system timezone identifier. This method infers the offset from CMD_GET_TIME.
 	 */
-	public synchronized int getDeviceGmtOffsetMinutes() throws IOException {
-		LocalDateTime deviceTime = getDeviceLocalTime();
-		Instant deviceTimeAsUtc = deviceTime.atOffset(ZoneOffset.UTC).toInstant();
-		long offsetSeconds = Duration.between(Instant.now(), deviceTimeAsUtc).getSeconds();
-		return roundToNearestQuarterHourMinutes(offsetSeconds);
+	public synchronized String getUTC() throws IOException {
+		return formatUtcOffsetText(inferDeviceUtcOffsetMinutesFromClock());
 	}
 
-	/**
-	 * Returns the inferred device GMT offset as text, for example {@code GMT+07:00}.
-	 */
-	public synchronized String getDeviceGmtOffsetText() throws IOException {
-		return formatGmtOffsetText(getDeviceGmtOffsetMinutes());
-	}
-
-	/**
-	 * Sets the device wall-clock time to {@code UTC now + minutes}.
-	 * <p>
-	 * Example: {@code setDeviceGmtOffsetMinutes(10 * 60 + 30)} configures the
-	 * device clock as GMT+10:30.
-	 */
-	public synchronized void setDeviceGmtOffsetMinutes(int minutes) throws IOException {
+	private static String formatUtcOffsetText(int minutes) {
 		validateGmtOffsetMinutes(minutes);
-		IOException lastFailure = null;
-		for (int attempt = 1; attempt <= 3; attempt++) {
-			try {
-				setDeviceLocalTimeForOffset(minutes);
-				sleepQuietly(300);
-				int actual = getDeviceGmtOffsetMinutes();
-				if (actual == minutes) {
-					return;
-				}
-				lastFailure = new IOException("Device GMT offset verify failed: expected "
-						+ formatGmtOffsetText(minutes) + " but got " + formatGmtOffsetText(actual));
-			} catch (IOException ex) {
-				lastFailure = ex;
-			}
-			sleepQuietly(500);
-		}
-		throw lastFailure != null ? lastFailure : new IOException("Unable to set device GMT offset");
-	}
-
-	/**
-	 * Formats offset minutes as {@code GMT+HH:mm} or {@code GMT-HH:mm}.
-	 */
-	public static String formatGmtOffsetText(int minutes) {
-		return formatGmtOffset(minutes);
+		int absolute = Math.abs(minutes);
+		return String.format("UTC%s%02d:%02d", minutes >= 0 ? "+" : "-", absolute / 60, absolute % 60);
 	}
 
 	public synchronized void clearCache() {
@@ -524,23 +486,11 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 		return value;
 	}
 
-	private void setDeviceLocalTime(LocalDateTime value) throws IOException {
-		if (value == null) {
-			throw new IllegalArgumentException("Device time must not be null");
-		}
-		ensureInteractiveCommandReady();
-		byte[] payload = new byte[4];
-		writeInt32LE(payload, 0, (int) ZKTeco4370_TimeCodec.encodeTime(value));
-		sendPacket(ZKTeco4370_ZkConstants.CMD_SET_TIME, payload);
-		ZKTeco4370_ZkPacket response = receivePacket();
-		if (!response.isOk()) {
-			throw new ZKTeco4370_ZkException("Device rejected time update", response.getCommandId());
-		}
-	}
-
-	private void setDeviceLocalTimeForOffset(int minutes) throws IOException {
-		ZoneOffset offset = ZoneOffset.ofTotalSeconds(minutes * 60);
-		setDeviceLocalTime(LocalDateTime.ofInstant(Instant.now(), offset));
+	private int inferDeviceUtcOffsetMinutesFromClock() throws IOException {
+		LocalDateTime deviceTime = getDeviceLocalTime();
+		Instant deviceTimeAsUtc = deviceTime.atOffset(ZoneOffset.UTC).toInstant();
+		long offsetSeconds = Duration.between(Instant.now(), deviceTimeAsUtc).getSeconds();
+		return roundToNearestQuarterHourMinutes(offsetSeconds);
 	}
 
 	private interface ZKTeco4370_PayloadHandler {
@@ -844,24 +794,16 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 		try {
 			validateGmtOffsetMinutes(minutes);
 		} catch (IllegalArgumentException ex) {
-			throw new IOException("Unable to infer a valid GMT offset from the device clock", ex);
+			throw new IOException("Unable to infer a valid UTC offset from the device clock", ex);
 		}
 		return minutes;
 	}
 
 	private static void validateGmtOffsetMinutes(int minutes) {
 		if (minutes < -18 * 60 || minutes > 18 * 60) {
-			throw new IllegalArgumentException("GMT offset minutes must be between -1080 and 1080: " + minutes);
+			throw new IllegalArgumentException("UTC offset minutes must be between -1080 and 1080: " + minutes);
 		}
 		ZoneOffset.ofTotalSeconds(minutes * 60);
-	}
-
-	private static String formatGmtOffset(int minutes) {
-		validateGmtOffsetMinutes(minutes);
-		int absolute = Math.abs(minutes);
-		int hours = absolute / 60;
-		int mins = absolute % 60;
-		return String.format("GMT%s%02d:%02d", minutes >= 0 ? "+" : "-", hours, mins);
 	}
 
 	private static String firstNonBlank(String first, String second) {
