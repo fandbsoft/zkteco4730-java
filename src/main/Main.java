@@ -21,15 +21,25 @@ public class Main {
 		System.out.println("       AUTO DETECT LEGACY FIRMWARE VA SECURE SENSEFACE/LINUX FIRMWARE           ");
 		System.out.println("================================================================================");
 
-		if (args.length >= 3) {
-			String label = args.length >= 4 ? args[3] : "CUSTOM DEVICE";
-			testDevice(label, args[0], Integer.parseInt(args[1]), Integer.parseInt(args[2]));
+		if (args.length > 0) {
+			if (args[0].equalsIgnoreCase("-h") || args[0].equalsIgnoreCase("--help")) {
+				System.out.println("Cach dung (Usage):");
+				System.out.println("  java -jar target/zkteco4370-java-1.0.0.jar <IP> [PORT] [PASSWORD] [LABEL]");
+				System.out.println("Vi du:");
+				System.out.println("  java -jar target/zkteco4370-java-1.0.0.jar 192.168.1.28 4370 111111 \"SenseFace 2A\"");
+				System.out.println("  java -jar target/zkteco4370-java-1.0.0.jar 192.168.1.39 4370 111111 \"Ronald Jack DG600BID\"");
+				return;
+			}
+			String ip = args[0];
+			int port = args.length >= 2 ? Integer.parseInt(args[1]) : ZKTeco4370_ZkConstants.DEFAULT_PORT;
+			int pwd = args.length >= 3 ? Integer.parseInt(args[2]) : 0;
+			String label = args.length >= 4 ? args[3] : "DEVICE (" + ip + ")";
+			testDevice(label, ip, port, pwd);
 		} else {
-//			testDevice("MAY 1: RONALD JACK DG 600BID", "192.168.1.39", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
+			System.out.println("Chay kiem thu mac dinh tren cac thiet bi LAN co san:\n");
+			testDevice("MAY 1: RONALD JACK DG 600BID (LEGACY)", "192.168.1.39", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
 			System.out.println("\n\n");
-//			testDevice("MAY 2: ZKTECO SENSEFACE 2A", "192.168.1.33", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
-			System.out.println("\n\n");
-			testDevice("MAY 3: ZKTECO SENSEFACE 2Aa", "192.168.1.28", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
+			testDevice("MAY 2: ZKTECO SENSEFACE 2A (SECURE 6001/DMC)", "192.168.1.28", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
 		}
 
 		System.out.println("\n================================================================================");
