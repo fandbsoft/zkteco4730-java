@@ -65,6 +65,7 @@ try (ZKTeco4370_ZkClient zk = new ZKTeco4370_ZkClient("192.168.1.33", 4370, 1111
     List<ZKTeco4370_UserInfo> users = zk.getAllUser();
     List<ZKTeco4370_AttendanceLog> allLogs = zk.getAllLog();
     List<ZKTeco4370_AttendanceLog> rangedLogs = zk.getLogAt(start, end);
+    String punchedAt = allLogs.get(0).getTimestampWithGmtOffsetText();
     int offsetMinutes = zk.getDeviceGmtOffsetMinutes();
     String offsetText = zk.getDeviceGmtOffsetText(); // e.g. GMT+07:00
     zk.setDeviceGmtOffsetMinutes(10 * 60 + 30);     // GMT+10:30

@@ -58,19 +58,10 @@ public class Main {
 			System.out.printf("   + Face Count         : %d%n", info.getFaceCount());
 			System.out.printf("   + Log Count          : %d%n", info.getLogCount());
 			int gmtOffsetMinutes = zk.getDeviceGmtOffsetMinutes();
-			System.out.printf("   + GMT Offset         : %s (%d minutes)%n",
-					ZKTeco4370_ZkClient.formatGmtOffsetText(gmtOffsetMinutes), gmtOffsetMinutes);
-			int originalGmtOffsetMinutes = gmtOffsetMinutes;
-			try {
-				zk.setDeviceGmtOffsetMinutes(5*60+30);
-				int verifiedOffsetMinutes = zk.getDeviceGmtOffsetMinutes();
-				System.out.printf("   + GMT Test Set       : %s (%d minutes)%n", ZKTeco4370_ZkClient.formatGmtOffsetText(verifiedOffsetMinutes), verifiedOffsetMinutes);
-			} finally {
-				zk.setDeviceGmtOffsetMinutes(originalGmtOffsetMinutes);
-			}
+			System.out.printf("   + GMT Offset         : %s (%d minutes)%n", ZKTeco4370_ZkClient.formatGmtOffsetText(gmtOffsetMinutes), gmtOffsetMinutes);
+			zk.setDeviceGmtOffsetMinutes(5*60+30);
 			gmtOffsetMinutes = zk.getDeviceGmtOffsetMinutes();
-			System.out.printf("   + GMT Restored       : %s (%d minutes)%n",
-					ZKTeco4370_ZkClient.formatGmtOffsetText(gmtOffsetMinutes), gmtOffsetMinutes);
+			System.out.printf("   + GMT Restored       : %s (%d minutes)%n",ZKTeco4370_ZkClient.formatGmtOffsetText(gmtOffsetMinutes), gmtOffsetMinutes);
 			System.out.println("   => [PASS] ZKTeco4370_DeviceInfo");
 
 			System.out.println("\n>>> [2] Lay danh sach user(userID, name, ngay tao)");
@@ -114,9 +105,10 @@ public class Main {
 	}
 
 	private static String formatLog(ZKTeco4370_AttendanceLog log) {
-		return String.format("userId=%-6s | time=%s | verify=%-16s | state=%-10s | workCode=%d",
+		return String.format("userId=%-6s | time=%s | timeGmt=%s | verify=%-16s | state=%-10s | workCode=%d",
 				log.getUserId(),
 				log.getTimestamp(),
+				log.getTimestampWithGmtOffsetText(),
 				log.getVerifyModeName() + "(" + log.getVerifyMode() + ")",
 				log.getInOutModeName() + "(" + log.getInOutMode() + ")",
 				log.getWorkCode());
