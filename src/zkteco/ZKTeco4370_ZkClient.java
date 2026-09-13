@@ -9,7 +9,10 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.interfaces.RSAPublicKey;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -291,6 +294,46 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 		return "";
 	}
 
+	/**
+	 * Returns the device GMT offset in minutes, inferred from CMD_GET_TIME.
+	 * <p>
+	 * ZKTeco pull devices usually expose local wall-clock time instead of a stable
+	 * timezone ID. The result is rounded to the nearest 15-minute offset.
+	 */
+	public synchronized int getDeviceGmtOffsetMinutes() throws IOException {
+		LocalDateTime deviceTime = getDeviceLocalTime();
+		Instant deviceTimeAsUtc = deviceTime.atOffset(ZoneOffset.UTC).toInstant();
+		long offsetSeconds = Duration.between(Instant.now(), deviceTimeAsUtc).getSeconds();
+		return roundToNearestQuarterHourMinutes(offsetSeconds);
+	}
+
+	/**
+	 * Returns the inferred device GMT offset as text, for example {@code GMT+07:00}.
+	 */
+	public synchronized String getDeviceGmtOffsetText() throws IOException {
+		return formatGmtOffsetText(getDeviceGmtOffsetMinutes());
+	}
+
+	/**
+	 * Sets the device wall-clock time to {@code UTC now + minutes}.
+	 * <p>
+	 * Example: {@code setDeviceGmtOffsetMinutes(10 * 60 + 30)} configures the
+	 * device clock as GMT+10:30.
+	 */
+	public synchronized void setDeviceGmtOffsetMinutes(int minutes) throws IOException {
+		validateGmtOffsetMinutes(minutes);
+		ZoneOffset offset = ZoneOffset.ofTotalSeconds(minutes * 60);
+		LocalDateTime targetDeviceTime = LocalDateTime.ofInstant(Instant.now(), offset);
+		setDeviceLocalTime(targetDeviceTime);
+	}
+
+	/**
+	 * Formats offset minutes as {@code GMT+HH:mm} or {@code GMT-HH:mm}.
+	 */
+	public static String formatGmtOffsetText(int minutes) {
+		return formatGmtOffset(minutes);
+	}
+
 	public synchronized void clearCache() {
 		attendanceLogCache = null;
 	}
@@ -451,6 +494,34 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 		int logs = readInt32LE(payload, 32);
 		int faces = payload.length >= 92 ? readInt32LE(payload, 80) : 0;
 		return new int[] { users, fingers, logs, faces };
+	}
+
+	private LocalDateTime getDeviceLocalTime() throws IOException {
+		ensureConnected();
+		sendPacket(ZKTeco4370_ZkConstants.CMD_GET_TIME, new byte[0]);
+		ZKTeco4370_ZkPacket response = receivePacket();
+		if (!(response.isOk() || response.isData()) || response.getPayloadLength() < 4) {
+			throw new ZKTeco4370_ZkException("Device rejected time read", response.getCommandId());
+		}
+		LocalDateTime value = ZKTeco4370_TimeCodec.decodeTime(readUInt32LE(response.payloadView(), 0));
+		if (value == null) {
+			throw new IOException("Device returned an invalid local time payload");
+		}
+		return value;
+	}
+
+	private void setDeviceLocalTime(LocalDateTime value) throws IOException {
+		if (value == null) {
+			throw new IllegalArgumentException("Device time must not be null");
+		}
+		ensureConnected();
+		byte[] payload = new byte[4];
+		writeInt32LE(payload, 0, (int) ZKTeco4370_TimeCodec.encodeTime(value));
+		sendPacket(ZKTeco4370_ZkConstants.CMD_SET_TIME, payload);
+		ZKTeco4370_ZkPacket response = receivePacket();
+		if (!response.isOk()) {
+			throw new ZKTeco4370_ZkException("Device rejected time update", response.getCommandId());
+		}
 	}
 
 	private interface ZKTeco4370_PayloadHandler {
@@ -726,6 +797,10 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 				| ((data[offset + 3] & 0xFF) << 24);
 	}
 
+	private static long readUInt32LE(byte[] data, int offset) {
+		return Integer.toUnsignedLong(readInt32LE(data, offset));
+	}
+
 	private static void writeInt32LE(byte[] data, int offset, int value) {
 		data[offset] = (byte) (value & 0xFF);
 		data[offset + 1] = (byte) ((value >>> 8) & 0xFF);
@@ -735,6 +810,32 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 
 	private static long toEpochMillis(long value) {
 		return value > 0 && value < 100_000_000_000L ? value * 1000L : value;
+	}
+
+	private static int roundToNearestQuarterHourMinutes(long offsetSeconds) throws IOException {
+		long roundedSeconds = Math.round(offsetSeconds / 900.0) * 900L;
+		int minutes = Math.toIntExact(roundedSeconds / 60L);
+		try {
+			validateGmtOffsetMinutes(minutes);
+		} catch (IllegalArgumentException ex) {
+			throw new IOException("Unable to infer a valid GMT offset from the device clock", ex);
+		}
+		return minutes;
+	}
+
+	private static void validateGmtOffsetMinutes(int minutes) {
+		if (minutes < -18 * 60 || minutes > 18 * 60) {
+			throw new IllegalArgumentException("GMT offset minutes must be between -1080 and 1080: " + minutes);
+		}
+		ZoneOffset.ofTotalSeconds(minutes * 60);
+	}
+
+	private static String formatGmtOffset(int minutes) {
+		validateGmtOffsetMinutes(minutes);
+		int absolute = Math.abs(minutes);
+		int hours = absolute / 60;
+		int mins = absolute % 60;
+		return String.format("GMT%s%02d:%02d", minutes >= 0 ? "+" : "-", hours, mins);
 	}
 
 	private static String firstNonBlank(String first, String second) {

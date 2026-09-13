@@ -33,6 +33,8 @@ download, and access-control unlock over TCP/IP.
 - All attendance logs.
 - Attendance logs by `long start`, `long end`; accepts epoch milliseconds or
   epoch seconds.
+- Device GMT offset inferred from the device clock, plus setting the device
+  clock to a requested GMT offset.
 - Remote door unlock with `CMD_UNLOCK` / `ACUnlock` command `31`.
 
 ## Quick test
@@ -63,9 +65,16 @@ try (ZKTeco4370_ZkClient zk = new ZKTeco4370_ZkClient("192.168.1.33", 4370, 1111
     List<ZKTeco4370_UserInfo> users = zk.getAllUser();
     List<ZKTeco4370_AttendanceLog> allLogs = zk.getAllLog();
     List<ZKTeco4370_AttendanceLog> rangedLogs = zk.getLogAt(start, end);
+    int offsetMinutes = zk.getDeviceGmtOffsetMinutes();
+    String offsetText = zk.getDeviceGmtOffsetText(); // e.g. GMT+07:00
+    zk.setDeviceGmtOffsetMinutes(10 * 60 + 30);     // GMT+10:30
     boolean unlocked = zk.unlock(5);
 }
 ```
+
+`setDeviceGmtOffsetMinutes` uses the ZKTeco local-time clock model: it sets the
+device wall-clock time to `UTC now + offset`. Tested SenseFace firmware does not
+return a stable timezone ID such as `Asia/Ho_Chi_Minh` over port `4370`.
 
 Note: current public 4370 user records on tested SenseFace firmware do not expose
 a dedicated user creation timestamp. `createdAt` is filled from the first

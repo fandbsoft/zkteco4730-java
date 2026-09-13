@@ -85,6 +85,8 @@ public static int calculateChecksum(byte[] buffer, int offset, int length) {
 * `CMD_SLEEP = 1006` (`0x03EE`): Chuyển thiết bị sang chế độ ngủ.
 * `CMD_RESUME = 1007` (`0x03EF`): Đánh thức thiết bị.
 * `CMD_TESTVOICE = 1017` (`0x03F9`): Phát âm thanh kiểm tra loa.
+* `CMD_GET_TIME = 201` (`0x00C9`): Đọc thời gian local hiện tại của thiết bị.
+* `CMD_SET_TIME = 202` (`0x00CA`): Ghi thời gian local hiện tại của thiết bị.
 * `CMD_VERSION = 1100` (`0x044C`): Đọc phiên bản firmware.
 * `CMD_AUTH = 1102` (`0x044E`): Gửi mật khẩu xác thực (Comm Key).
 * `CMD_OPTIONS_RRQ = 11` (`0x000B`): Đọc tham số cấu hình hệ thống (Vendor, SerialNumber, Platform...).

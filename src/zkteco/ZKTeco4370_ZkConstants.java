@@ -14,6 +14,8 @@ public final class ZKTeco4370_ZkConstants {
 	public static final int TCP_MAGIC = 0x5050827D;
 	public static final int TCP_MAGIC_ALT = 0x5050837C;
 
+	public static final int CMD_GET_TIME = 201;
+	public static final int CMD_SET_TIME = 202;
 	public static final int CMD_CONNECT = 1000;
 	public static final int CMD_EXIT = 1001;
 	public static final int CMD_ENABLEDEVICE = 1002;
