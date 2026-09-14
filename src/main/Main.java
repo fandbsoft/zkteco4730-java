@@ -39,7 +39,7 @@ public class Main {
 			System.out.println("Chay kiem thu mac dinh tren cac thiet bi LAN co san:\n");
 			testDevice("MAY 1: RONALD JACK DG 600BID (LEGACY)", "192.168.1.39", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
 			System.out.println("\n\n");
-			testDevice("MAY 2: ZKTECO SENSEFACE 2A (SECURE 6001/DMC)", "192.168.1.28", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
+			testDevice("MAY 2: ZKTECO SENSEFACE 2A (SECURE 6001/DMC)", "192.168.1.33", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
 		}
 
 		System.out.println("\n================================================================================");
