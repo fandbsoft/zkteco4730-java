@@ -1,5 +1,8 @@
 package main;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
@@ -77,6 +80,7 @@ public class Main {
 			for (ZKTeco4370_UserInfo user : users)
 				System.out.printf("   * ID: %-6s | Name: %-16s | CreatedAt: %-20s | Epoch: %-13d | Privilege: %-2d | Enabled: %s%n", user.getUserId(), user.getName(), user.getCreatedAt(), user.getCreatedAtEpochMilli(), user.getPrivilege(), user.isEnabled());
 			System.out.println("   => [PASS] ZKTeco4370_UserInfo");
+			downloadAnyUserPhoto(zk, users);
 
 			System.out.println("\n>>> [3] Lay tat ca log cham cong");
 			long t1 = System.currentTimeMillis();
@@ -109,6 +113,22 @@ public class Main {
 			System.err.println("   [FAIL] " + label + ": " + e.getMessage());
 			e.printStackTrace(System.err);
 		}
+	}
+
+	private static void downloadAnyUserPhoto(ZKTeco4370_ZkClient zk, List<ZKTeco4370_UserInfo> users) throws IOException {
+		Path output = Path.of("xxx.jpg").toAbsolutePath().normalize();
+		for (ZKTeco4370_UserInfo user : users) {
+			byte[] jpg;
+			try {
+				jpg = zk.downloadUserPhoto(user.getUserId());
+			} catch (IOException ex) {
+				continue; // Try another user if this photo cannot be downloaded.
+			}
+			Files.write(output, jpg);
+			System.out.printf("-> Da luu anh: %s (%d bytes)%n", output, jpg.length);
+			return;
+		}
+		System.out.println("-> Khong tai duoc anh cua user nao.");
 	}
 
 	private static String formatLog(ZKTeco4370_AttendanceLog log) {
