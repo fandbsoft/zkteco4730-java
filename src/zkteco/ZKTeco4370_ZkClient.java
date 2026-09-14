@@ -72,6 +72,9 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 			throw new IllegalArgumentException("Invalid TCP port: " + port);
 		}
 		this.host = host.trim();
+		if (connectTimeoutMs <= 0 || readTimeoutMs <= 0) {
+			throw new IllegalArgumentException("Connection and read timeouts must be positive");
+		}
 		this.port = port;
 		this.password = password;
 		this.passwordText = Integer.toString(password);
@@ -83,8 +86,8 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 		if (isConnected()) {
 			return;
 		}
-		openSocket();
 		try {
+			openSocket();
 			sendPacket(ZKTeco4370_ZkConstants.CMD_CONNECT, new byte[0], false);
 			ZKTeco4370_ZkPacket response = receivePacket();
 			this.sessionId = response.getSessionId();
@@ -363,8 +366,11 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 				}
 			});
 			return;
-		} catch (Exception ex) {
-			// 2. Fallback: Nếu firmware máy cũ không hỗ trợ opcode 10004, tự động tải toàn bộ và lọc client-side
+		} catch (ZKTeco4370_ZkException ex) {
+			int code = ex.getResponseCode();
+			if (code != 65535 && code != 65533 && code != 4989) throw ex;
+			// Unsupported command or failed range buffer allocation: verify with a full read.
+			reconnectPreservingCache();
 		}
 
 		streamAllLog(log -> {
@@ -704,6 +710,9 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 				handler.onFinish();
 				return;
 			}
+			if (!response.isOk() && !response.isPrepareData()) {
+				throw new ZKTeco4370_ZkException("Unexpected " + label + " response", response.getCommandId());
+			}
 			if (payload.length == 0) {
 				handler.onStart(0);
 				handler.onFinish();
@@ -722,7 +731,6 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 			}
 
 			int offset = 0;
-			int prepareSkips = 0;
 			while (offset < totalSize) {
 				int chunkSize = Math.min(ZKTeco4370_ZkConstants.DEFAULT_BUFFER_CHUNK_SIZE, totalSize - offset);
 				byte[] chunkRequest = new byte[8];
@@ -730,21 +738,22 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 				writeInt32LE(chunkRequest, 4, chunkSize);
 				sendPacket(ZKTeco4370_ZkConstants.CMD_READ_BUFFER, chunkRequest);
 				ZKTeco4370_ZkPacket chunkResponse = receivePacket();
-				if (chunkResponse.isError() || chunkResponse.isUnauth() || chunkResponse.isAuthLock()) {
-					throw new ZKTeco4370_ZkException("Device rejected " + label + " buffer chunk", chunkResponse.getCommandId());
-				}
-				if (chunkResponse.isPrepareData()) {
+				int prepareSkips = 0;
+				while (chunkResponse.isPrepareData()) {
 					if (++prepareSkips > 3) {
 						throw new IOException("Device repeatedly returned prepare marker while reading " + label);
 					}
-					continue;
+					chunkResponse = receivePacket();
 				}
-				prepareSkips = 0;
+				if (!chunkResponse.isData() && !chunkResponse.isOk()) {
+					throw new ZKTeco4370_ZkException("Device rejected " + label + " buffer chunk", chunkResponse.getCommandId());
+				}
 				byte[] chunk = chunkResponse.payloadView();
 				if (chunk.length == 0) {
 					throw new EOFException("Device ended " + label + " buffer at " + offset + " / " + totalSize + " bytes");
 				}
-				int bytesToConsume = Math.min(chunk.length, totalSize - offset);
+				if (chunk.length > chunkSize) throw new IOException("Oversized " + label + " buffer chunk");
+				int bytesToConsume = chunk.length;
 				handler.onChunk(chunk, 0, bytesToConsume);
 				offset += bytesToConsume;
 			}
@@ -869,7 +878,12 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 				throw new IOException("Unable to decrypt secure frame", e);
 			}
 		}
-		return ZKTeco4370_ZkPacket.parseZkBytes(zkBytes, 0, zkBytes.length);
+		try {
+			return ZKTeco4370_ZkPacket.parseZkBytes(zkBytes, 0, zkBytes.length);
+		} catch (IllegalArgumentException ex) {
+			closeSocketOnly();
+			throw new IOException("Invalid received ZK packet", ex);
+		}
 	}
 
 	private void ensureConnected() throws IOException {
@@ -1017,7 +1031,6 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 		if (closed) {
 			return;
 		}
-		closed = true;
 		if (connected && socket != null && !socket.isClosed()) {
 			try {
 				socket.setSoTimeout(1000);
@@ -1029,6 +1042,7 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 	}
 
 	private void closeSocketOnly() {
+		closed = true;
 		connected = false;
 		secureMode = false;
 		bulkReadSinceConnect = false;

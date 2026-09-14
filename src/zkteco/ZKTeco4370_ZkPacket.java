@@ -82,11 +82,17 @@ final class ZKTeco4370_ZkPacket {
 	}
 
 	static ZKTeco4370_ZkPacket parseZkBytes(byte[] raw, int offset, int length) {
-		if (raw == null || length < ZKTeco4370_ZkConstants.ZK_HEADER_SIZE) {
+		if (raw == null || offset < 0 || length < ZKTeco4370_ZkConstants.ZK_HEADER_SIZE
+				|| offset > raw.length - length) {
 			throw new IllegalArgumentException("Invalid ZK packet length: " + length);
 		}
 		int cmd = readUInt16LE(raw, offset);
 		int chk = readUInt16LE(raw, offset + 2);
+		byte[] checked = java.util.Arrays.copyOfRange(raw, offset, offset + length);
+		checked[2] = checked[3] = 0;
+		if (calculateChecksum(checked) != chk) {
+			throw new IllegalArgumentException("Invalid ZK packet checksum");
+		}
 		int sess = readUInt16LE(raw, offset + 4);
 		int reply = readUInt16LE(raw, offset + 6);
 		int payloadLength = length - ZKTeco4370_ZkConstants.ZK_HEADER_SIZE;
@@ -99,7 +105,7 @@ final class ZKTeco4370_ZkPacket {
 
 	private static int calculateChecksum(byte[] data) {
 		int length = data.length;
-		int sum = 0;
+		long sum = 0;
 		int i = 0;
 		while (length > 1) {
 			sum += (data[i] & 0xFF) | ((data[i + 1] & 0xFF) << 8);
@@ -112,7 +118,7 @@ final class ZKTeco4370_ZkPacket {
 		while ((sum >>> 16) > 0) {
 			sum = (sum & 0xFFFF) + (sum >>> 16);
 		}
-		return (~sum) & 0xFFFF;
+		return (int) ((~sum) & 0xFFFF);
 	}
 
 	private static int readUInt16LE(byte[] data, int offset) {

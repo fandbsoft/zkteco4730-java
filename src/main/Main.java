@@ -80,7 +80,7 @@ public class Main {
 			for (ZKTeco4370_UserInfo user : users)
 				System.out.printf("   * ID: %-6s | Name: %-16s | CreatedAt: %-20s | Epoch: %-13d | Privilege: %-2d | Enabled: %s%n", user.getUserId(), user.getName(), user.getCreatedAt(), user.getCreatedAtEpochMilli(), user.getPrivilege(), user.isEnabled());
 			System.out.println("   => [PASS] ZKTeco4370_UserInfo");
-			downloadAnyUserPhoto(zk, users);
+			
 
 			System.out.println("\n>>> [3] Lay tat ca log cham cong");
 			long t1 = System.currentTimeMillis();
@@ -109,6 +109,9 @@ public class Main {
 			System.out.printf("-> Gui CMD_UNLOCK=%d, delay=%d giay...%n", ZKTeco4370_ZkConstants.CMD_UNLOCK, delaySeconds);
 			boolean unlocked = zk.unlock(delaySeconds);
 			System.out.println("-> Trang thai mo cua: " + (unlocked ? "THANH CONG [PASS]" : "THAT BAI [FAIL]"));
+			
+			downloadAnyUserPhoto(zk, users);
+			
 		} catch (Exception e) {
 			System.err.println("   [FAIL] " + label + ": " + e.getMessage());
 			e.printStackTrace(System.err);
@@ -116,17 +119,16 @@ public class Main {
 	}
 
 	private static void downloadAnyUserPhoto(ZKTeco4370_ZkClient zk, List<ZKTeco4370_UserInfo> users) throws IOException {
-		Path output = Path.of("xxx.jpg").toAbsolutePath().normalize();
 		for (ZKTeco4370_UserInfo user : users) {
 			byte[] jpg;
 			try {
 				jpg = zk.downloadUserPhoto(user.getUserId());
+				Files.write(Path.of(user.getUserId()+".jpg").toAbsolutePath().normalize(), jpg);
+				System.out.println("	---->"+user.getUserId());
 			} catch (IOException ex) {
+				ex.printStackTrace();
 				continue; // Try another user if this photo cannot be downloaded.
 			}
-			Files.write(output, jpg);
-			System.out.printf("-> Da luu anh: %s (%d bytes)%n", output, jpg.length);
-			return;
 		}
 		System.out.println("-> Khong tai duoc anh cua user nao.");
 	}
