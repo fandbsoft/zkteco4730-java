@@ -37,7 +37,8 @@ public class Main {
 			testDevice(label, ip, port, pwd);
 		} else {
 			System.out.println("Chay kiem thu mac dinh tren cac thiet bi LAN co san:\n");
-			testDevice("MAY 1: RONALD JACK DG 600BID (LEGACY)", "192.168.1.39", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
+//			testDevice("MAY 1: RONALD JACK DG 600BID (LEGACY)", "42.112.179.197", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
+//			testDevice("MAY 1: RONALD JACK DG 600BID (LEGACY)", "192.168.1.39", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
 			System.out.println("\n\n");
 			testDevice("MAY 2: ZKTECO SENSEFACE 2A (SECURE 6001/DMC)", "192.168.1.33", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
 		}
@@ -88,8 +89,8 @@ public class Main {
 			System.out.println("   => [PASS] getAllLog");
 
 			System.out.println("\n>>> [4] Lay log cham cong theo thoi diem long start, long end");
-			LocalDateTime startRange = LocalDateTime.of(2026, 9, 10, 0, 0, 0);
-			LocalDateTime endRange = LocalDateTime.of(2026, 9, 12, 23, 59, 59);
+			LocalDateTime startRange = LocalDateTime.of(2026, 9, 14, 0, 0, 0);
+			LocalDateTime endRange = LocalDateTime.of(2026, 9, 14, 23, 59, 59);
 			long startMillis = startRange.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
 			long endMillis = endRange.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
 			List<ZKTeco4370_AttendanceLog> rangeLogs = zk.getLogAt(startMillis, endMillis);

@@ -183,6 +183,68 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 		return logs;
 	}
 
+	/**
+	 * Downloads the user's JPG photo (not a biometric face template).
+	 * @param userId userInfo.getUserId(), without the .jpg extension
+	 * @return JPG bytes, ready for Files.write or image display
+	 * @throws IOException if the photo is unavailable, unsupported, or incomplete
+	 */
+	public synchronized byte[] downloadUserPhoto(String userId) throws IOException {
+		if (userId == null || !userId.matches("[ A-Za-z0-9_-]+")
+				|| !userId.trim().matches("[A-Za-z0-9_-]{1,24}")) {
+			throw new IllegalArgumentException("userId must contain 1-24 letters, digits, underscores or hyphens");
+		}
+		ensureInteractiveCommandReady();
+		try {
+			// Z_DownloadUserPhoto: direct command, NUL-terminated filename.
+			sendPacket(10010, (userId.trim() + ".jpg\0").getBytes(StandardCharsets.US_ASCII));
+			ZKTeco4370_ZkPacket response = receivePacket();
+			byte[] photo;
+			if (response.isData()) {
+				photo = response.getPayload();
+			} else if (response.isPrepareData()) {
+				byte[] descriptor = response.payloadView();
+				if (descriptor.length < 8) throw new IOException("Invalid photo transfer descriptor");
+				int size = readInt32LE(descriptor, 0);
+				int chunkSize = readInt32LE(descriptor, 4);
+				if (size <= 0 || size > 1024 * 1024 || chunkSize <= 0 || chunkSize > 1024 * 1024) {
+					throw new IOException("Invalid photo transfer size");
+				}
+				photo = new byte[size];
+				int count = (size + chunkSize - 1) / chunkSize;
+				boolean[] received = new boolean[count];
+				int transferReply = response.getReplyId();
+				for (int n = 0; n < count; n++) {
+					ZKTeco4370_ZkPacket chunk = receivePacket();
+					// In this SDK transfer, the session field is the chunk index.
+					int index = chunk.getSessionId();
+					if (!chunk.isData() || chunk.getReplyId() != transferReply || index >= count || received[index]) {
+						throw new IOException("Invalid photo transfer chunk");
+					}
+					int offset = index * chunkSize;
+					if (chunk.getPayloadLength() != Math.min(chunkSize, size - offset)) {
+						throw new IOException("Incomplete photo transfer chunk");
+					}
+					System.arraycopy(chunk.payloadView(), 0, photo, offset, chunk.getPayloadLength());
+					received[index] = true;
+				}
+			} else {
+				throw new ZKTeco4370_ZkException("User photo unavailable or download unsupported", response.getCommandId());
+			}
+			if (photo.length < 4 || photo.length > 1024 * 1024
+					|| (photo[0] & 255) != 255 || (photo[1] & 255) != 216
+					|| (photo[photo.length - 2] & 255) != 255 || (photo[photo.length - 1] & 255) != 217) {
+				throw new IOException("Device did not return a complete JPG photo");
+			}
+			return photo;
+		} finally {
+			// Firmware may append a terminal packet; isolate it from subsequent calls.
+			// The next operation reconnects automatically and retains the log cache.
+			closeSocketOnly();
+			closed = true;
+		}
+	}
+
 	public synchronized List<ZKTeco4370_AttendanceLog> getAttendanceLogs() throws IOException {
 		return getAllLog();
 	}

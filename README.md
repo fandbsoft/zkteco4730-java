@@ -63,6 +63,35 @@ java -jar target/zkteco4370-java-1.0.0.jar
 
 ## 💻 Hướng dẫn sử dụng trong mã nguồn Java (Code Examples)
 
+### Tải ảnh người dùng
+
+```java
+byte[] jpg = zk.downloadUserPhoto(userInfo.getUserId());
+// Hoặc: byte[] jpg = zk.downloadUserPhoto("001");
+java.nio.file.Files.write(java.nio.file.Path.of("photo.jpg"), jpg);
+```
+
+Truyền User ID dạng `String` để giữ số 0 ở đầu, không thêm `.jpg`.
+Hàm trả ảnh JPG; ném `IOException` khi thiết bị từ chối, ảnh không có hoặc dữ liệu
+không đầy đủ. ID chấp nhận 1–24 ký tự ASCII chữ, số, `_`, `-`.
+Đây là ảnh người dùng của `DownloadUserPhoto`, không phải face template hay ảnh
+chụp lúc chấm công. Sau tải ảnh, kết nối được đóng và lần gọi tiếp theo tự kết nối lại.
+
+Đã đối chiếu ngày 2026-09-14 với zkemkeeper 6.3.1.55 trên SenseFace 2A:
+máy `.33` trả JPG 24.639 byte giống SHA-256 với SDK; máy `.28` trả mã 4985,
+tương ứng lỗi SDK -4985. Chưa xác minh trên các dòng firmware khác.
+Lệnh trực tiếp 10010 cùng tên file ASCII kết thúc NUL được đối chiếu với
+`Z_DownloadUserPhoto` trong `zkemsdk.dll` và luồng `ZEMBPRO_READDATA1` của
+`commpro.dll` (bản SDK mirror CNCU dùng trong phiên kiểm tra).
+
+Kiểm thử giao thức độc lập, không cần thiết bị (Windows):
+
+```powershell
+mvn -q package
+javac -cp target/classes -d target/photo-tests tests/PhotoDownloadTest.java
+java -cp 'target/classes;target/photo-tests' zkteco.PhotoDownloadTest
+```
+
 ### Tích hợp qua Maven (`pom.xml`)
 Nếu đưa vào dự án nội bộ hoặc copy source code:
 ```xml
