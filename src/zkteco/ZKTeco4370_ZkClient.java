@@ -13,6 +13,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -186,25 +188,33 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 	}
 
 	public synchronized List<ZKTeco4370_AttendanceLog> getLogAt(long start, long end) throws IOException {
-		if (attendanceLogCacheEnabled && attendanceLogCache != null) {
-			long startMillis = start <= 0 ? Long.MIN_VALUE : toEpochMillis(start);
-			long endMillis = end <= 0 ? Long.MAX_VALUE : toEpochMillis(end);
-			long min = Math.min(startMillis, endMillis);
-			long max = Math.max(startMillis, endMillis);
-
-			List<ZKTeco4370_AttendanceLog> result = new ArrayList<>();
-			for (ZKTeco4370_AttendanceLog log : attendanceLogCache) {
-				long timestamp = log.getTimestampEpochMilli();
-				if (timestamp > 0 && timestamp >= min && timestamp <= max) {
-					result.add(log);
-				}
-			}
-			return result;
-		}
-
 		List<ZKTeco4370_AttendanceLog> result = new ArrayList<>();
 		streamLogAt(start, end, result::add);
 		return result;
+	}
+
+	public synchronized List<ZKTeco4370_AttendanceLog> getLogAt(LocalDateTime start, LocalDateTime end) throws IOException {
+		List<ZKTeco4370_AttendanceLog> result = new ArrayList<>();
+		streamLogAt(start, end, result::add);
+		return result;
+	}
+
+	public synchronized List<ZKTeco4370_AttendanceLog> getLogAt(String sTime, String eTime) throws IOException {
+		List<ZKTeco4370_AttendanceLog> result = new ArrayList<>();
+		streamLogAt(sTime, eTime, result::add);
+		return result;
+	}
+
+	/**
+	 * Tải các bản ghi chấm công theo khoảng thời gian tương thích chuẩn hàm
+	 * {@code ReadTimeGLogData(dwMachineNumber, sTime, eTime)} của zkemkeeper.
+	 *
+	 * @param sTime Thời gian bắt đầu định dạng "YYYY-MM-DD hh:mm:ss".
+	 * @param eTime Thời gian kết thúc định dạng "YYYY-MM-DD hh:mm:ss".
+	 * @return Danh sách các bản ghi chấm công trong khoảng thời gian.
+	 */
+	public synchronized List<ZKTeco4370_AttendanceLog> readTimeGLogData(String sTime, String eTime) throws IOException {
+		return getLogAt(sTime, eTime);
 	}
 
 	public synchronized void streamAllLog(Consumer<ZKTeco4370_AttendanceLog> consumer) throws IOException {
@@ -231,19 +241,129 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 		});
 	}
 
+	/**
+	 * Streaming log chấm công theo luồng ReadTimeGLogData (CMD_ATTLOG_TIME_RRQ = 10004)
+	 * trực tiếp từ phần cứng máy chấm công.
+	 */
+	public synchronized void streamLogAt(LocalDateTime start, LocalDateTime end, Consumer<ZKTeco4370_AttendanceLog> consumer) throws IOException {
+		Objects.requireNonNull(consumer, "Attendance log consumer must not be null");
+		ensureConnected();
+		int deviceGmtOffsetMinutes = inferDeviceUtcOffsetMinutesFromClock();
+		ZoneOffset deviceOffset = ZoneOffset.ofTotalSeconds(deviceGmtOffsetMinutes * 60);
+
+		LocalDateTime startTime = start != null ? start : LocalDateTime.of(2000, 1, 1, 0, 0, 0);
+		LocalDateTime endTime = end != null ? end : LocalDateTime.of(2099, 12, 31, 23, 59, 59);
+
+		if (startTime.isAfter(endTime)) {
+			LocalDateTime temp = startTime;
+			startTime = endTime;
+			endTime = temp;
+		}
+
+		long minMillis = startTime.toInstant(deviceOffset).toEpochMilli();
+		long maxMillis = endTime.toInstant(deviceOffset).toEpochMilli();
+
+		if (attendanceLogCacheEnabled && attendanceLogCache != null) {
+			for (ZKTeco4370_AttendanceLog log : attendanceLogCache) {
+				long ts = log.getTimestampEpochMilli();
+				if (ts >= minMillis && ts <= maxMillis) {
+					consumer.accept(log);
+				}
+			}
+			return;
+		}
+
+		// 1. Thử gửi lệnh phạm vi thời gian CMD_ATTLOG_TIME_RRQ (10004) chuẩn mã máy zkemkeeper
+		try {
+			byte[] request = buildRangeAttendanceLogRequest(startTime, endTime);
+			ZKTeco4370_RecordParser.ZKTeco4370_StreamingParser parser = ZKTeco4370_RecordParser.newStreamingParser(
+					log -> {
+						ZKTeco4370_AttendanceLog tagged = log.withDeviceGmtOffsetMinutes(deviceGmtOffsetMinutes);
+						long ts = tagged.getTimestampEpochMilli();
+						if (ts >= minMillis && ts <= maxMillis) {
+							consumer.accept(tagged);
+						}
+					});
+			streamBufferedPayload(request, "range attendance logs", new ZKTeco4370_PayloadHandler() {
+				@Override
+				public void onStart(int totalSize) {
+					parser.start(totalSize);
+				}
+
+				@Override
+				public void onChunk(byte[] data, int offset, int length) {
+					parser.accept(data, offset, length);
+				}
+
+				@Override
+				public void onFinish() {
+					parser.finish();
+				}
+			});
+			return;
+		} catch (Exception ex) {
+			// 2. Fallback: Nếu firmware máy cũ không hỗ trợ opcode 10004, tự động tải toàn bộ và lọc client-side
+		}
+
+		streamAllLog(log -> {
+			long ts = log.getTimestampEpochMilli();
+			if (ts >= minMillis && ts <= maxMillis) {
+				consumer.accept(log);
+			}
+		});
+	}
+
 	public synchronized void streamLogAt(long start, long end, Consumer<ZKTeco4370_AttendanceLog> consumer) throws IOException {
 		Objects.requireNonNull(consumer, "Attendance log consumer must not be null");
+		ensureConnected();
+		int deviceGmtOffsetMinutes = inferDeviceUtcOffsetMinutesFromClock();
+		ZoneOffset deviceOffset = ZoneOffset.ofTotalSeconds(deviceGmtOffsetMinutes * 60);
+
 		long startMillis = start <= 0 ? Long.MIN_VALUE : toEpochMillis(start);
 		long endMillis = end <= 0 ? Long.MAX_VALUE : toEpochMillis(end);
 		long min = Math.min(startMillis, endMillis);
 		long max = Math.max(startMillis, endMillis);
 
-		streamAllLog(log -> {
-			long timestamp = log.getTimestampEpochMilli();
-			if (timestamp > 0 && timestamp >= min && timestamp <= max) {
-				consumer.accept(log);
+		LocalDateTime startTime = (min == Long.MIN_VALUE)
+				? LocalDateTime.of(2000, 1, 1, 0, 0, 0)
+				: LocalDateTime.ofInstant(Instant.ofEpochMilli(min), deviceOffset);
+		LocalDateTime endTime = (max == Long.MAX_VALUE)
+				? LocalDateTime.of(2099, 12, 31, 23, 59, 59)
+				: LocalDateTime.ofInstant(Instant.ofEpochMilli(max), deviceOffset);
+
+		streamLogAt(startTime, endTime, consumer);
+	}
+
+	public synchronized void streamLogAt(String sTime, String eTime, Consumer<ZKTeco4370_AttendanceLog> consumer) throws IOException {
+		LocalDateTime start = parseFlexibleDateTime(sTime);
+		LocalDateTime end = parseFlexibleDateTime(eTime);
+		streamLogAt(start, end, consumer);
+	}
+
+	private static LocalDateTime parseFlexibleDateTime(String text) {
+		if (text == null || text.isBlank()) {
+			return null;
+		}
+		String clean = text.trim();
+		DateTimeFormatter[] formatters = new DateTimeFormatter[] {
+				DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"),
+				DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"),
+				DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"),
+				DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm"),
+				DateTimeFormatter.ofPattern("yyyy-MM-dd"),
+				DateTimeFormatter.ofPattern("yyyy/MM/dd"),
+				DateTimeFormatter.ISO_LOCAL_DATE_TIME
+		};
+		for (DateTimeFormatter dtf : formatters) {
+			try {
+				if (clean.length() <= 10 && !clean.contains("T") && !clean.contains(":")) {
+					return java.time.LocalDate.parse(clean, dtf).atStartOfDay();
+				}
+				return LocalDateTime.parse(clean, dtf);
+			} catch (DateTimeParseException ignored) {
 			}
-		});
+		}
+		throw new IllegalArgumentException("Invalid date-time format (expected yyyy-MM-dd HH:mm:ss): " + text);
 	}
 
 	public synchronized boolean unlock(int delaySeconds) throws IOException {
@@ -590,6 +710,18 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 		request[0] = 1;
 		request[1] = (byte) (ZKTeco4370_ZkConstants.CMD_ATTLOG_RRQ & 0xFF);
 		request[2] = (byte) ((ZKTeco4370_ZkConstants.CMD_ATTLOG_RRQ >>> 8) & 0xFF);
+		return request;
+	}
+
+	private static byte[] buildRangeAttendanceLogRequest(LocalDateTime startTime, LocalDateTime endTime) {
+		byte[] request = new byte[11];
+		request[0] = 1;
+		request[1] = (byte) (ZKTeco4370_ZkConstants.CMD_ATTLOG_TIME_RRQ & 0xFF);
+		request[2] = (byte) ((ZKTeco4370_ZkConstants.CMD_ATTLOG_TIME_RRQ >>> 8) & 0xFF);
+		int startVal = (int) ZKTeco4370_TimeCodec.encodeTime(startTime);
+		int endVal = (int) ZKTeco4370_TimeCodec.encodeTime(endTime);
+		writeInt32LE(request, 3, startVal);
+		writeInt32LE(request, 7, endVal);
 		return request;
 	}
 

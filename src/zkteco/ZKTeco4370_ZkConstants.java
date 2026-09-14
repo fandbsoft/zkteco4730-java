@@ -28,6 +28,8 @@ public final class ZKTeco4370_ZkConstants {
 	public static final int CMD_OPTIONS_RRQ = 11;
 	public static final int CMD_OPTIONS_WRQ = 12;
 	public static final int CMD_ATTLOG_RRQ = 13;
+	public static final int CMD_ATTLOG_TIME_RRQ = 10004;
+	public static final int CMD_READ_TIME_LOG = 10004;
 	public static final int CMD_CLEAR_DATA = 14;
 	public static final int CMD_CLEAR_ATTLOG = 15;
 	public static final int CMD_USER_RRQ = 8;

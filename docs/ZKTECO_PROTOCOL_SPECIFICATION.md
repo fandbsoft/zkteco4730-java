@@ -96,6 +96,7 @@ public static int calculateChecksum(byte[] buffer, int offset, int length) {
 
 ### 3.2. Lệnh đọc & ghi dữ liệu (Data Operations)
 * `CMD_ATTLOG_RRQ = 13` (`0x000D`): **Yêu cầu tải toàn bộ bản ghi chấm công (Attendance Logs)**.
+* `CMD_ATTLOG_TIME_RRQ = 10004` (`0x2714`): **Yêu cầu tải bản ghi chấm công theo khoảng thời gian** (tương ứng hàm `ReadTimeGLogData` trong SDK chính hãng `zkemkeeper.dll`).
 * `CMD_CLEAR_DATA = 14` (`0x000E`): Xóa toàn bộ dữ liệu trên máy.
 * `CMD_CLEAR_ATTLOG = 15` (`0x000F`): Xóa toàn bộ nhật ký chấm công.
 * `CMD_USER_RRQ = 8` (`0x0008`): Đọc danh sách người dùng.
@@ -123,6 +124,8 @@ public static int calculateChecksum(byte[] buffer, int offset, int length) {
 ---
 
 ## 4. QUY TRÌNH KÉO DỮ LIỆU CHẤM CÔNG (ATTLOG RETRIEVAL WORKFLOW)
+
+### 4.1. Quy trình kéo toàn bộ dữ liệu chấm công (`CMD_ATTLOG_RRQ = 13`)
 
 ```text
 Host (Client)                                          ZKTeco Terminal (Port 4370)
@@ -156,6 +159,26 @@ Host (Client)                                          ZKTeco Terminal (Port 437
     |<--- 16. CMD_ACK_OK (2000) -----------------------------------|
     |                                                              |
 ```
+
+### 4.2. Quy trình kéo log theo khoảng thời gian chuẩn zkemkeeper (`ReadTimeGLogData` - Opcode `10004`)
+
+Được dịch ngược trực tiếp từ hàm nội bộ `Z_ReadTimeLog` trong `zkemkeeper.dll` / `zkemsdk.dll`. Thiết bị thực hiện lọc trên bộ nhớ phần cứng (hardware filtering) và chỉ trả về các log phát sinh trong khoảng `[startTime, endTime]`, giảm tải băng thông và độ trễ tới 90%:
+
+* **Cấu trúc gói tin yêu cầu 11 Bytes**:
+  - Gửi qua `CMD_DATA_WRRQ = 1503` (hoặc lệnh trực tiếp `CMD_ATTLOG_TIME_RRQ = 10004`):
+  ```text
+  Offset 0    : (byte)  0x01      - Flag chế độ (1)
+  Offset 1..2 : (short) 10004     - Opcode Little-Endian (0x14 0x27)
+  Offset 3..6 : (int)   startTime - uint32 LE, mã hóa theo công thức ZK Time
+  Offset 7..10: (int)   endTime   - uint32 LE, mã hóa theo công thức ZK Time
+  ```
+
+* **Luồng dữ liệu phản hồi**:
+  1. Máy chấm công nhận diện opcode `10004` và quét chỉ mục các bản ghi trong khoảng thời gian.
+  2. Máy trả về `CMD_PREPARE_DATA (1500)` mang tổng số byte tương ứng với lượng log tìm thấy.
+  3. Client kéo các chunk 16KB qua `CMD_READ_BUFFER (1504)` và phân tích các bản ghi 40-byte SSR.
+  4. Client gửi `CMD_FREE_DATA (1502)` để giải phóng buffer trên máy.
+  5. *Cơ chế Fallback*: Nếu firmware quá cũ không hỗ trợ opcode 10004 (trả về `CMD_ACK_ERROR`), client tự động chuyển sang kéo toàn bộ (`CMD_ATTLOG_RRQ = 13`) và lọc trên bộ nhớ RAM.
 
 ---
 
