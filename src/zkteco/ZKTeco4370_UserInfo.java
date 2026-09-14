@@ -3,10 +3,12 @@ package zkteco;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 
+import backendgame.com.core.KeepAttributes;
+
 /**
  * User record returned by a ZKTeco terminal.
  */
-public final class ZKTeco4370_UserInfo {
+public final class ZKTeco4370_UserInfo implements KeepAttributes{
 	private final String userId;
 	private final String name;
 	private final LocalDateTime createdAt;

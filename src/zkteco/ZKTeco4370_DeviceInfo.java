@@ -1,9 +1,11 @@
 package zkteco;
 
+import backendgame.com.core.KeepAttributes;
+
 /**
  * Immutable device summary returned by a ZKTeco terminal.
  */
-public final class ZKTeco4370_DeviceInfo {
+public final class ZKTeco4370_DeviceInfo implements KeepAttributes{
 	private final String serialNumber;
 	private final String firmwareVersion;
 	private final String platform;

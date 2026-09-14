@@ -5,10 +5,12 @@ import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 
+import backendgame.com.core.KeepAttributes;
+
 /**
  * Attendance transaction record returned by a ZKTeco terminal.
  */
-public final class ZKTeco4370_AttendanceLog {
+public final class ZKTeco4370_AttendanceLog implements KeepAttributes{
 	private final String userId;
 	private final int uid;
 	private final LocalDateTime timestamp;
