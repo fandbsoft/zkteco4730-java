@@ -12,6 +12,7 @@ import java.security.interfaces.RSAPublicKey;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -368,8 +369,8 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 			return;
 		} catch (ZKTeco4370_ZkException ex) {
 			int code = ex.getResponseCode();
-			if (code != 65535 && code != 65533 && code != 4989) throw ex;
-			// Unsupported command or failed range buffer allocation: verify with a full read.
+			if (code != ZKTeco4370_ZkConstants.CMD_ACK_ERROR && code != 65535 && code != 65533 && code != 4989) throw ex;
+			// Unsupported command (2001/65535/65533) or failed range buffer: fallback with a full read and filter.
 			reconnectPreservingCache();
 		}
 
@@ -492,9 +493,9 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 	}
 
 	private static String formatUtcOffsetText(int minutes) {
-		validateGmtOffsetMinutes(minutes);
-		int absolute = Math.abs(minutes);
-		return String.format("UTC%s%02d:%02d", minutes >= 0 ? "+" : "-", absolute / 60, absolute % 60);
+		int valid = validateGmtOffsetMinutes(minutes);
+		int absolute = Math.abs(valid);
+		return String.format("UTC%s%02d:%02d", valid >= 0 ? "+" : "-", absolute / 60, absolute % 60);
 	}
 
 	public synchronized void clearCache() {
@@ -674,11 +675,16 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 		return value;
 	}
 
-	private int inferDeviceUtcOffsetMinutesFromClock() throws IOException {
-		LocalDateTime deviceTime = getDeviceLocalTime();
-		Instant deviceTimeAsUtc = deviceTime.atOffset(ZoneOffset.UTC).toInstant();
-		long offsetSeconds = Duration.between(Instant.now(), deviceTimeAsUtc).getSeconds();
-		return roundToNearestQuarterHourMinutes(offsetSeconds);
+	private int inferDeviceUtcOffsetMinutesFromClock() {
+		try {
+			LocalDateTime deviceTime = getDeviceLocalTime();
+			Instant deviceTimeAsUtc = deviceTime.atOffset(ZoneOffset.UTC).toInstant();
+			long offsetSeconds = Duration.between(Instant.now(), deviceTimeAsUtc).getSeconds();
+			return roundToNearestQuarterHourMinutes(offsetSeconds);
+		} catch (Exception e) {
+			int defaultOffsetSeconds = ZoneId.systemDefault().getRules().getOffset(Instant.now()).getTotalSeconds();
+			return defaultOffsetSeconds / 60;
+		}
 	}
 
 	private interface ZKTeco4370_PayloadHandler {
@@ -696,6 +702,10 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 			sendPacket(ZKTeco4370_ZkConstants.CMD_DATA_WRRQ, request);
 			releaseDeviceBuffer = true;
 			ZKTeco4370_ZkPacket response = receivePacket();
+			int initSkips = 0;
+			while (response.isOk() && response.getPayloadLength() == 0 && ++initSkips <= 3) {
+				response = receivePacket();
+			}
 			if (response.isError() || response.isUnauth() || response.isAuthLock()) {
 				throw new ZKTeco4370_ZkException("Device rejected " + label + " read", response.getCommandId());
 			}
@@ -739,9 +749,9 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 				sendPacket(ZKTeco4370_ZkConstants.CMD_READ_BUFFER, chunkRequest);
 				ZKTeco4370_ZkPacket chunkResponse = receivePacket();
 				int prepareSkips = 0;
-				while (chunkResponse.isPrepareData()) {
-					if (++prepareSkips > 3) {
-						throw new IOException("Device repeatedly returned prepare marker while reading " + label);
+				while (!chunkResponse.isData() && (chunkResponse.isPrepareData() || (chunkResponse.isOk() && chunkResponse.getPayloadLength() == 0))) {
+					if (++prepareSkips > 5) {
+						break;
 					}
 					chunkResponse = receivePacket();
 				}
@@ -996,22 +1006,19 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 		return value > 0 && value < 100_000_000_000L ? value * 1000L : value;
 	}
 
-	private static int roundToNearestQuarterHourMinutes(long offsetSeconds) throws IOException {
+	private static int roundToNearestQuarterHourMinutes(long offsetSeconds) {
 		long roundedSeconds = Math.round(offsetSeconds / 900.0) * 900L;
 		int minutes = Math.toIntExact(roundedSeconds / 60L);
-		try {
-			validateGmtOffsetMinutes(minutes);
-		} catch (IllegalArgumentException ex) {
-			throw new IOException("Unable to infer a valid UTC offset from the device clock", ex);
-		}
-		return minutes;
+		return validateGmtOffsetMinutes(minutes);
 	}
 
-	private static void validateGmtOffsetMinutes(int minutes) {
+	private static int validateGmtOffsetMinutes(int minutes) {
 		if (minutes < -18 * 60 || minutes > 18 * 60) {
-			throw new IllegalArgumentException("UTC offset minutes must be between -1080 and 1080: " + minutes);
+			int defaultOffsetSeconds = ZoneId.systemDefault().getRules().getOffset(Instant.now()).getTotalSeconds();
+			return defaultOffsetSeconds / 60;
 		}
 		ZoneOffset.ofTotalSeconds(minutes * 60);
+		return minutes;
 	}
 
 	private static String firstNonBlank(String first, String second) {

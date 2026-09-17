@@ -29,7 +29,7 @@ public class Main {
 				System.out.println("Cach dung (Usage):");
 				System.out.println("  java -jar target/zkteco4370-java-1.0.0.jar <IP> [PORT] [PASSWORD] [LABEL]");
 				System.out.println("Vi du:");
-				System.out.println("  java -jar target/zkteco4370-java-1.0.0.jar 192.168.1.28 4370 111111 \"SenseFace 2A\"");
+				System.out.println("  java -jar target/zkteco4370-java-1.0.0.jar 192.168.1.190 4370 111111 \"iSCAN-03\"");
 				System.out.println("  java -jar target/zkteco4370-java-1.0.0.jar 192.168.1.39 4370 111111 \"Ronald Jack DG600BID\"");
 				return;
 			}
@@ -40,10 +40,7 @@ public class Main {
 			testDevice(label, ip, port, pwd);
 		} else {
 			System.out.println("Chay kiem thu mac dinh tren cac thiet bi LAN co san:\n");
-//			testDevice("MAY 1: RONALD JACK DG 600BID (LEGACY)", "42.112.179.197", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
-//			testDevice("MAY 1: RONALD JACK DG 600BID (LEGACY)", "192.168.1.39", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
-			System.out.println("\n\n");
-			testDevice("MAY 2: ZKTECO SENSEFACE 2A (SECURE 6001/DMC)", "192.168.1.33", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
+			testDevice("MAY: ZKTECO iSCAN-03 / ZEM560 (LEGACY)", "192.168.1.190", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
 		}
 
 		System.out.println("\n================================================================================");
@@ -77,32 +74,48 @@ public class Main {
 			System.out.println("\n>>> [2] Lay danh sach user(userID, name, ngay tao)");
 			List<ZKTeco4370_UserInfo> users = zk.getAllUser();
 			System.out.printf("-> Tim thay %d user:%n", users.size());
-			for (ZKTeco4370_UserInfo user : users)
-				System.out.printf("   * ID: %-6s | Name: %-16s | CreatedAt: %-20s | Epoch: %-13d | Privilege: %-2d | Enabled: %s%n", user.getUserId(), user.getName(), user.getCreatedAt(), user.getCreatedAtEpochMilli(), user.getPrivilege(), user.isEnabled());
+			int showUserCount = Math.min(10, users.size());
+			for (int i = 0; i < showUserCount; i++) {
+				ZKTeco4370_UserInfo user = users.get(i);
+				System.out.printf("   [%02d] ID: %-10s | Name: %-16s | CreatedAt: %-20s | Privilege: %-2d | Enabled: %s%n",
+						i + 1, user.getUserId(), user.getName(), user.getCreatedAt(), user.getPrivilege(), user.isEnabled());
+			}
+			if (users.size() > showUserCount) {
+				System.out.printf("   ... va %d user khac ...%n", users.size() - showUserCount);
+			}
 			System.out.println("   => [PASS] ZKTeco4370_UserInfo");
-			
 
 			System.out.println("\n>>> [3] Lay tat ca log cham cong");
 			long t1 = System.currentTimeMillis();
 			List<ZKTeco4370_AttendanceLog> allLogs = zk.getAllLog();
 			long t2 = System.currentTimeMillis();
 			System.out.printf("-> Tai thanh cong %d log trong %d ms:%n", allLogs.size(), t2 - t1);
-			for (int i = 0; i < allLogs.size(); i++) {
+			int showLogCount = Math.min(10, allLogs.size());
+			for (int i = 0; i < showLogCount; i++) {
 				System.out.printf("   [%02d] %s%n", i + 1, formatLog(allLogs.get(i)));
+			}
+			if (allLogs.size() > showLogCount) {
+				System.out.printf("   ... va %d log khac ...%n", allLogs.size() - showLogCount);
+				System.out.printf("   [%02d] %s%n", allLogs.size(), formatLog(allLogs.get(allLogs.size() - 1)));
 			}
 			System.out.println("   => [PASS] getAllLog");
 
 			System.out.println("\n>>> [4] Lay log cham cong theo thoi diem long start, long end");
-			LocalDateTime startRange = LocalDateTime.of(2026, 9, 14, 0, 0, 0);
-			LocalDateTime endRange = LocalDateTime.of(2026, 9, 14, 23, 59, 59);
-			long startMillis = startRange.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
-			long endMillis = endRange.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
-			List<ZKTeco4370_AttendanceLog> rangeLogs = zk.getLogAt(startMillis, endMillis);
-			System.out.printf("-> Tim thay %d log trong khoang [%d, %d]:%n", rangeLogs.size(), startMillis, endMillis);
-			for (int i = 0; i < rangeLogs.size(); i++) {
-				System.out.printf("   [%02d] %s%n", i + 1, formatLog(rangeLogs.get(i)));
+			if (!allLogs.isEmpty()) {
+				LocalDateTime sampleTime = allLogs.get(0).getTimestamp();
+				LocalDateTime startRange = sampleTime.minusDays(1);
+				LocalDateTime endRange = sampleTime.plusDays(1);
+				long startMillis = startRange.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+				long endMillis = endRange.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+				List<ZKTeco4370_AttendanceLog> rangeLogs = zk.getLogAt(startMillis, endMillis);
+				System.out.printf("-> Tim thay %d log trong khoang [%s -> %s]:%n", rangeLogs.size(), startRange, endRange);
+				for (int i = 0; i < Math.min(5, rangeLogs.size()); i++) {
+					System.out.printf("   [%02d] %s%n", i + 1, formatLog(rangeLogs.get(i)));
+				}
+				System.out.println("   => [PASS] getLogAt");
+			} else {
+				System.out.println("-> Khong co log tren thiet bi de loc.");
 			}
-			System.out.println("   => [PASS] getLogAt");
 
 			System.out.println("\n>>> [5] Mo cua");
 			int delaySeconds = ZKTeco4370_ZkConstants.DEFAULT_UNLOCK_DELAY_SECONDS;
@@ -118,23 +131,34 @@ public class Main {
 		}
 	}
 
-	private static void downloadAnyUserPhoto(ZKTeco4370_ZkClient zk, List<ZKTeco4370_UserInfo> users) throws IOException {
+	private static void downloadAnyUserPhoto(ZKTeco4370_ZkClient zk, List<ZKTeco4370_UserInfo> users) {
+		System.out.println("\n>>> [6] Thu tai anh nguoi dung");
+		int attempts = 0;
 		for (ZKTeco4370_UserInfo user : users) {
-			byte[] jpg;
 			try {
-				jpg = zk.downloadUserPhoto(user.getUserId());
-				Files.write(Path.of(user.getUserId()+".jpg").toAbsolutePath().normalize(), jpg);
-				System.out.println("	---->"+user.getUserId());
-			} catch (IOException ex) {
-				ex.printStackTrace();
-				continue; // Try another user if this photo cannot be downloaded.
+				byte[] jpg = zk.downloadUserPhoto(user.getUserId());
+				if (jpg != null && jpg.length > 0) {
+					Path outPath = Path.of(user.getUserId() + ".jpg").toAbsolutePath().normalize();
+					Files.write(outPath, jpg);
+					System.out.println("   -> Da tai thanh cong anh user: " + user.getUserId() + " (" + jpg.length + " bytes)");
+					return;
+				}
+			} catch (zkteco.ZKTeco4370_ZkException ex) {
+				if (ex.getResponseCode() == 65535 || ex.getResponseCode() == 2001) {
+					System.out.println("   -> Thiet bi khong ho tro tinh nang tai anh nguoi dung (ma phan hoi: " + ex.getResponseCode() + ").");
+					return;
+				}
+			} catch (Exception ignored) {
+			}
+			if (++attempts >= 3) {
+				break;
 			}
 		}
-		System.out.println("-> Khong tai duoc anh cua user nao.");
+		System.out.println("   -> Khong tim thay anh nguoi dung nao tren thiet bi.");
 	}
 
 	private static String formatLog(ZKTeco4370_AttendanceLog log) {
-		return String.format("userId=%-6s | time=%s | timeGmt=%s | verify=%-16s | state=%-10s | workCode=%d",
+		return String.format("userId=%-10s | time=%s | timeGmt=%s | verify=%-16s | state=%-10s | workCode=%d",
 				log.getUserId(),
 				log.getTimestamp(),
 				log.getTimestampWithGmtOffsetText(),
