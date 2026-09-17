@@ -25,6 +25,8 @@ public final class ZKTeco4370_ZkConstants {
 	public static final int CMD_SLEEP = 1006;
 	public static final int CMD_RESUME = 1007;
 	public static final int CMD_TESTVOICE = 1017;
+	public static final int CMD_REFRESHDATA = 1013;
+	public static final int CMD_REFRESHOPTION = 1014;
 	public static final int CMD_OPTIONS_RRQ = 11;
 	public static final int CMD_OPTIONS_WRQ = 12;
 	public static final int CMD_ATTLOG_RRQ = 13;

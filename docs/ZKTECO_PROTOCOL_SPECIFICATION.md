@@ -218,7 +218,23 @@ public static LocalDateTime decodeZkTime(long rawTime) {
 }
 ```
 
-### 5.3. Cấu trúc thống kê dung lượng (`CMD_GET_FREE_SIZES` - 92 Bytes)
+**Mã hóa thời gian để ghi xuống thiết bị (`CMD_SET_TIME = 202`)**:
+```java
+public static long encodeZkTime(LocalDateTime time) {
+    long date = ((long) (time.getYear() - 2000) * 12 + time.getMonthValue() - 1) * 31
+            + time.getDayOfMonth() - 1;
+    return (((date * 24 + time.getHour()) * 60 + time.getMinute()) * 60 + time.getSecond());
+}
+```
+
+### 5.3. Quy trình đồng bộ toàn diện thời gian & múi giờ UTC (`syncTime`)
+Để ghi thành công vào chip RTC phần cứng của thiết bị, cập nhật múi giờ hệ thống và hiển thị ngay lên màn hình LCD mà không bị lỗi nhảy giờ:
+1. Gửi `CMD_DISABLEDEVICE (1003)`: Tạm khóa thiết bị để bảo vệ các thao tác ghi.
+2. Gửi cấu hình múi giờ UTC trước qua `CMD_OPTIONS_WRQ (12)`: Ghi các tham số `~TimeZone`, `TimeZone` (số phút lệch so với UTC, ví dụ 420 cho UTC+7) và `TZ` (định danh múi giờ), sau đó gửi `CMD_REFRESHOPTION (1014)` để thiết bị nạp múi giờ vào ngữ cảnh hệ thống trước (tránh trường hợp đổi múi giờ sau làm nhảy lệch giờ RTC).
+3. Gửi `CMD_SET_TIME (202)` sau cùng: Kèm 4 bytes Little-Endian uint32 `encodeZkTime(localTime)` ghi vào chip RTC, sau đó gửi `CMD_REFRESHDATA (1013)` để chốt thời gian và vẽ lại đồng hồ màn hình LCD.
+4. Gửi `CMD_ENABLEDEVICE (1002)` trong khối `finally`: Luôn mở khóa lại bàn phím và mắt đọc cho người dùng.
+
+### 5.4. Cấu trúc thống kê dung lượng (`CMD_GET_FREE_SIZES` - 92 Bytes)
 Dữ liệu phản hồi gồm các số nguyên 32-bit Little-Endian tại các vị trí offset:
 * `Offset 16`: Tổng số người dùng đã đăng ký (`User Count`).
 * `Offset 24`: Tổng số mẫu vân tay (`FP Count`).

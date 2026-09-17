@@ -39,8 +39,8 @@ public class Main {
 			testDevice(label, ip, port, pwd);
 		} else {
 			System.out.println("Chay kiem thu mac dinh tren cac thiet bi LAN co san:\n");
-//			testDevice("MAY: ZKTECO iSCAN-03 / ZEM560 (LEGACY)", "192.168.1.190", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
-			testDevice("MAY: ZKTECO iSCAN-03 / ZEM560 (LEGACY)", "192.168.1.33", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
+			testDevice("MAY: ZKTECO iSCAN-03 / ZEM560 (LEGACY)", "192.168.1.190", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
+//			testDevice("MAY: ZKTECO iSCAN-03 / ZEM560 (LEGACY)", "192.168.1.33", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
 //			testDevice("MAY: ZKTECO iSCAN-03 / ZEM560 (LEGACY)", "42.112.179.197", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
 		}
 
@@ -127,6 +127,20 @@ public class Main {
 			System.out.println("-> Trang thai mo cua: " + (unlocked ? "THANH CONG [PASS]" : "THAT BAI [FAIL]"));
 			
 			downloadAnyUserPhoto(zk, users);
+
+			System.out.println("\n>>> [7] Kiem tra va Dong bo thoi gian & UTC (syncTime)");
+			try {
+				LocalDateTime timeBefore = zk.getDeviceTime();
+				System.out.println("   + Gio tren may cham cong truoc dong bo: " + timeBefore);
+				boolean synced = zk.syncTime();
+				LocalDateTime timeAfter = zk.getDeviceTime();
+				System.out.println("   + Trang thai dong bo (syncTime)       : " + (synced ? "THANH CONG [PASS]" : "THAT BAI [FAIL]"));
+				System.out.println("   + Gio tren may cham cong sau dong bo : " + timeAfter);
+				System.out.println("   + UTC Offset thiet bi sau dong bo    : " + zk.getUTC());
+				System.out.println("   => [PASS] syncTime");
+			} catch (Exception timeEx) {
+				System.err.println("   -> Loi dong bo thoi gian: " + timeEx.getMessage());
+			}
 			
 		} catch (Exception e) {
 			System.err.println("   [FAIL] " + label + ": " + e.getMessage());

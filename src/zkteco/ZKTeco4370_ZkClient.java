@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -496,6 +497,217 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 		int valid = validateGmtOffsetMinutes(minutes);
 		int absolute = Math.abs(valid);
 		return String.format("UTC%s%02d:%02d", valid >= 0 ? "+" : "-", absolute / 60, absolute % 60);
+	}
+
+	/**
+	 * Ghi một tham số cấu hình hệ thống xuống thiết bị qua lệnh CMD_OPTIONS_WRQ (12).
+	 *
+	 * @param key Tên tham số (ví dụ: ~TimeZone, TimeZone, TZ, SDKBuild...).
+	 * @param value Giá trị cấu hình cần ghi.
+	 * @return true nếu thiết bị chấp nhận cấu hình, false nếu thất bại.
+	 */
+	public synchronized boolean setDeviceOption(String key, String value) throws IOException {
+		if (key == null || key.isBlank()) {
+			return false;
+		}
+		ensureInteractiveCommandReady();
+		String item = key.trim() + "=" + (value != null ? value.trim() : "") + "\0";
+		byte[] payload = item.getBytes(StandardCharsets.US_ASCII);
+		sendPacket(ZKTeco4370_ZkConstants.CMD_OPTIONS_WRQ, payload);
+		ZKTeco4370_ZkPacket response = receivePacket();
+		return response.isOk();
+	}
+
+	/**
+	 * Làm mới cấu hình tham số hệ thống trên thiết bị (CMD_REFRESHOPTION = 1014).
+	 *
+	 * @return true nếu thiết bị phản hồi OK, false nếu thất bại.
+	 */
+	public synchronized boolean refreshOptions() throws IOException {
+		ensureInteractiveCommandReady();
+		sendPacket(ZKTeco4370_ZkConstants.CMD_REFRESHOPTION, new byte[0]);
+		ZKTeco4370_ZkPacket response = receivePacket();
+		return response.isOk();
+	}
+
+	/**
+	 * Vô hiệu hóa bàn phím và màn hình thiết bị (CMD_DISABLEDEVICE = 1003).
+	 * Thường dùng khi đồng bộ dữ liệu lớn hoặc ghi cấu hình/RTC để tránh người dùng thao tác.
+	 *
+	 * @return true nếu thiết bị phản hồi OK, false nếu thất bại.
+	 */
+	public synchronized boolean disableDevice() throws IOException {
+		ensureInteractiveCommandReady();
+		sendPacket(ZKTeco4370_ZkConstants.CMD_DISABLEDEVICE, new byte[0]);
+		ZKTeco4370_ZkPacket response = receivePacket();
+		return response.isOk();
+	}
+
+	/**
+	 * Kích hoạt lại thiết bị sau khi hoàn thành thao tác dữ liệu (CMD_ENABLEDEVICE = 1002).
+	 *
+	 * @return true nếu thiết bị phản hồi OK, false nếu thất bại.
+	 */
+	public synchronized boolean enableDevice() throws IOException {
+		ensureInteractiveCommandReady();
+		sendPacket(ZKTeco4370_ZkConstants.CMD_ENABLEDEVICE, new byte[0]);
+		ZKTeco4370_ZkPacket response = receivePacket();
+		return response.isOk();
+	}
+
+	/**
+	 * Làm mới bộ đệm dữ liệu trên thiết bị (CMD_REFRESHDATA = 1013).
+	 *
+	 * @return true nếu thiết bị phản hồi OK, false nếu thất bại.
+	 */
+	public synchronized boolean refreshData() throws IOException {
+		ensureInteractiveCommandReady();
+		sendPacket(ZKTeco4370_ZkConstants.CMD_REFRESHDATA, new byte[0]);
+		ZKTeco4370_ZkPacket response = receivePacket();
+		return response.isOk();
+	}
+
+	/**
+	 * Đọc thời gian hiển thị trên màn hình của máy chấm công (CMD_GET_TIME = 201).
+	 *
+	 * @return Thời gian local hiện tại của thiết bị.
+	 */
+	public synchronized LocalDateTime getDeviceTime() throws IOException {
+		return getDeviceLocalTime();
+	}
+
+	/**
+	 * Đồng bộ thời gian và múi giờ máy chấm công theo thời gian và múi giờ hiện tại của máy tính.
+	 * Vừa ghi giờ cục bộ vào chip RTC phần cứng, vừa đồng bộ tham số cấu hình UTC TimeZone.
+	 *
+	 * @return true nếu đồng bộ thành công, false nếu thất bại.
+	 */
+	public synchronized boolean syncTime() throws IOException {
+		return syncTime(ZonedDateTime.now());
+	}
+
+	/**
+	 * Đồng bộ thời gian và múi giờ máy chấm công theo thời điểm xác định kèm múi giờ (ZonedDateTime).
+	 *
+	 * @param zonedDateTime Thời gian và múi giờ cần đồng bộ.
+	 * @return true nếu đồng bộ thành công, false nếu thất bại.
+	 */
+	public synchronized boolean syncTime(ZonedDateTime zonedDateTime) throws IOException {
+		Objects.requireNonNull(zonedDateTime, "ZonedDateTime must not be null");
+		return syncTime(zonedDateTime.toLocalDateTime(), zonedDateTime.getOffset(), zonedDateTime.getZone());
+	}
+
+	/**
+	 * Đồng bộ thời gian máy chấm công theo LocalDateTime với múi giờ mặc định của hệ thống.
+	 *
+	 * @param localTime Thời gian cần cài đặt.
+	 * @return true nếu đồng bộ thành công, false nếu thất bại.
+	 */
+	public synchronized boolean syncTime(LocalDateTime localTime) throws IOException {
+		Objects.requireNonNull(localTime, "LocalTime must not be null");
+		ZoneId defaultZone = ZoneId.systemDefault();
+		ZoneOffset offset = defaultZone.getRules().getOffset(localTime);
+		return syncTime(localTime, offset, defaultZone);
+	}
+
+	/**
+	 * Đồng bộ toàn diện cả thời gian hiển thị (Local Wall-Clock Time) và múi giờ UTC cho máy chấm công.
+	 * Luồng thực thi chuẩn zkemkeeper SDK:
+	 * 1. Khóa tạm thiết bị (CMD_DISABLEDEVICE = 1003).
+	 * 2. Đồng bộ cấu hình múi giờ UTC Offset trước qua CMD_OPTIONS_WRQ (~TimeZone, TimeZone, TZ)
+	 *    và làm mới cấu hình (CMD_REFRESHOPTION = 1014) để tránh nhảy giờ khi áp dụng múi giờ.
+	 * 3. Ghi thời gian hiển thị cục bộ (CMD_SET_TIME = 202) vào chip RTC sau cùng và làm mới màn hình (CMD_REFRESHDATA = 1013).
+	 * 4. Luôn mở khóa lại thiết bị trong khối finally (CMD_ENABLEDEVICE = 1002).
+	 *
+	 * @param localTime Thời gian cục bộ cài đặt vào máy chấm công.
+	 * @param offset Múi giờ UTC offset (ví dụ: UTC+07:00).
+	 * @param zoneId Định danh múi giờ (ví dụ: "Asia/Ho_Chi_Minh").
+	 * @return true nếu ghi thời gian thành công, false nếu thất bại.
+	 */
+	public synchronized boolean syncTime(LocalDateTime localTime, ZoneOffset offset, ZoneId zoneId) throws IOException {
+		Objects.requireNonNull(localTime, "LocalTime must not be null");
+		ensureInteractiveCommandReady();
+
+		try {
+			// 1. Tạm khóa thiết bị để ghi cấu hình và chip RTC an toàn
+			try {
+				disableDevice();
+			} catch (Exception ignored) {
+			}
+
+			// 2. BƯỚC 1: Đồng bộ cấu hình múi giờ UTC TimeZone TRƯỚC
+			// Để thiết bị nạp múi giờ mới vào hệ thống, tránh trường hợp áp dụng timezone sau làm nhảy giờ RTC
+			if (offset != null) {
+				int totalMinutes = offset.getTotalSeconds() / 60;
+				String offsetMinutesStr = String.valueOf(totalMinutes);
+
+				try {
+					setDeviceOption("~TimeZone", offsetMinutesStr);
+				} catch (Exception ignored) {
+				}
+				try {
+					setDeviceOption("TimeZone", offsetMinutesStr);
+				} catch (Exception ignored) {
+				}
+				if (zoneId != null) {
+					try {
+						setDeviceOption("TZ", zoneId.getId());
+					} catch (Exception ignored) {
+					}
+				}
+				try {
+					refreshOptions();
+				} catch (Exception ignored) {
+				}
+			}
+
+			// 3. BƯỚC 2: Ghi thời gian local vào chip RTC SAU CÙNG và làm mới màn hình
+			byte[] payload = new byte[4];
+			long encoded = ZKTeco4370_TimeCodec.encodeTime(localTime);
+			writeInt32LE(payload, 0, (int) encoded);
+			sendPacket(ZKTeco4370_ZkConstants.CMD_SET_TIME, payload);
+			ZKTeco4370_ZkPacket response = receivePacket();
+
+			if (!response.isOk()) {
+				return false;
+			}
+
+			try {
+				refreshData();
+			} catch (Exception ignored) {
+			}
+
+			return true;
+		} finally {
+			// 4. Luôn đảm bảo mở khóa lại thiết bị
+			try {
+				enableDevice();
+			} catch (Exception ignored) {
+			}
+		}
+	}
+
+	/**
+	 * Đồng bộ thời gian máy chấm công theo giờ hiện tại của máy tính.
+	 *
+	 * @deprecated Khuyến nghị sử dụng {@link #syncTime()} để đồng bộ toàn diện cả thời gian và múi giờ UTC.
+	 * @return true nếu đồng bộ thành công, false nếu thất bại.
+	 */
+	@Deprecated
+	public synchronized boolean setDeviceTime() throws IOException {
+		return syncTime();
+	}
+
+	/**
+	 * Cài đặt ngày giờ cho máy chấm công qua lệnh CMD_SET_TIME (202).
+	 *
+	 * @deprecated Khuyến nghị sử dụng {@link #syncTime(LocalDateTime)} để đồng bộ toàn diện cả thời gian và múi giờ UTC.
+	 * @param time Thời gian cần cài đặt vào máy chấm công.
+	 * @return true nếu thiết bị chấp nhận và cài đặt thành công, false nếu thất bại.
+	 */
+	@Deprecated
+	public synchronized boolean setDeviceTime(LocalDateTime time) throws IOException {
+		return syncTime(time);
 	}
 
 	public synchronized void clearCache() {
