@@ -71,7 +71,6 @@ public class Main {
 			System.out.printf("   + Face Count         : %d%n", info.getFaceCount());
 			System.out.printf("   + Log Count          : %d%n", info.getLogCount());
 			System.out.printf("   + UTC Offset         : %s%n", zk.getUTC());
-			BGUtility.trace(zk.getCloudConfig());
 			System.out.println("   => [PASS] ZKTeco4370_DeviceInfo");
 
 			System.out.println("\n>>> [2] Lay danh sach user(userID, name, ngay tao)");
