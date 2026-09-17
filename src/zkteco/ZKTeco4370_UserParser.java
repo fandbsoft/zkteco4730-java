@@ -202,14 +202,22 @@ final class ZKTeco4370_UserParser {
 			return null;
 		}
 		int uid = ZKTeco4370_RecordParser.readUInt16LE(data, offset);
+		int rawPrivilege = data[offset + 2] & 0xFF;
+		int privilege = rawPrivilege == 0x0E ? 3 : (rawPrivilege & 0x0E) >> 1;
+		if (rawPrivilege == 0) {
+			privilege = 0;
+		}
+		boolean enabled = (rawPrivilege & 0x01) == 0;
+		String password = readNullTerminated(data, offset + 3, 8, StandardCharsets.US_ASCII);
 		String name = readNullTerminated(data, offset + 11, 24, StandardCharsets.UTF_8);
+		long cardNumber = Integer.toUnsignedLong(ZKTeco4370_RecordParser.readInt32LE(data, offset + 35));
+		int group = data[offset + 40] & 0xFF;
+		int timeZone = ZKTeco4370_RecordParser.readUInt16LE(data, offset + 42);
 		String pin = readNullTerminated(data, offset + 48, 24, StandardCharsets.US_ASCII);
 		if (pin.isEmpty() && uid > 0) {
 			pin = String.valueOf(uid);
 		}
-		int rawPrivilege = data[offset + 2] & 0xFF;
-		int privilege = rawPrivilege == 0x0E ? 3 : rawPrivilege;
-		return new ZKTeco4370_UserInfo(pin, name, null, privilege, true);
+		return new ZKTeco4370_UserInfo(uid, pin, name, password, cardNumber, privilege, enabled, group, timeZone, null);
 	}
 
 	private static ZKTeco4370_UserInfo parseRecord28(byte[] data, int offset) {
@@ -217,10 +225,20 @@ final class ZKTeco4370_UserParser {
 			return null;
 		}
 		int uid = ZKTeco4370_RecordParser.readUInt16LE(data, offset);
-		String name = readNullTerminated(data, offset + 11, 8, StandardCharsets.UTF_8);
 		int rawPrivilege = data[offset + 2] & 0xFF;
-		int privilege = rawPrivilege == 0x0E ? 3 : rawPrivilege;
-		return new ZKTeco4370_UserInfo(String.valueOf(uid), name, null, privilege, true);
+		int privilege = rawPrivilege == 0x0E ? 3 : (rawPrivilege & 0x0E) >> 1;
+		if (rawPrivilege == 0) {
+			privilege = 0;
+		}
+		boolean enabled = (rawPrivilege & 0x01) == 0;
+		String password = readNullTerminated(data, offset + 3, 5, StandardCharsets.US_ASCII);
+		String name = readNullTerminated(data, offset + 8, 8, StandardCharsets.UTF_8);
+		long cardNumber = Integer.toUnsignedLong(ZKTeco4370_RecordParser.readInt32LE(data, offset + 16));
+		int group = data[offset + 21] & 0xFF;
+		int timeZone = ZKTeco4370_RecordParser.readUInt16LE(data, offset + 22);
+		long pin2 = Integer.toUnsignedLong(ZKTeco4370_RecordParser.readInt32LE(data, offset + 24));
+		String pin = pin2 > 0 ? String.valueOf(pin2) : String.valueOf(uid);
+		return new ZKTeco4370_UserInfo(uid, pin, name, password, cardNumber, privilege, enabled, group, timeZone, null);
 	}
 
 	private static String readNullTerminated(byte[] data, int offset, int maxLen, java.nio.charset.Charset charset) {

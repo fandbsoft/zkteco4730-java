@@ -1,6 +1,5 @@
 package main;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
@@ -41,6 +40,7 @@ public class Main {
 		} else {
 			System.out.println("Chay kiem thu mac dinh tren cac thiet bi LAN co san:\n");
 			testDevice("MAY: ZKTECO iSCAN-03 / ZEM560 (LEGACY)", "192.168.1.190", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
+//			testDevice("MAY: ZKTECO iSCAN-03 / ZEM560 (LEGACY)", "42.112.179.197", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
 		}
 
 		System.out.println("\n================================================================================");
@@ -77,8 +77,10 @@ public class Main {
 			int showUserCount = Math.min(10, users.size());
 			for (int i = 0; i < showUserCount; i++) {
 				ZKTeco4370_UserInfo user = users.get(i);
-				System.out.printf("   [%02d] ID: %-10s | Name: %-16s | CreatedAt: %-20s | Privilege: %-2d | Enabled: %s%n",
-						i + 1, user.getUserId(), user.getName(), user.getCreatedAt(), user.getPrivilege(), user.isEnabled());
+				System.out.printf("   [%02d] UID: %-4d | ID: %-10s | Name: %-16s | Card: %-10d | Pwd: %-6s | Role: %-12s | Grp: %-2d | TZ: %-2d | Enabled: %s%n",
+						i + 1, user.getUid(), user.getUserId(), user.getName(), user.getCardNumber(),
+						user.getPassword().isEmpty() ? "-" : user.getPassword(),
+						user.getPrivilegeName(), user.getGroup(), user.getTimeZone(), user.isEnabled());
 			}
 			if (users.size() > showUserCount) {
 				System.out.printf("   ... va %d user khac ...%n", users.size() - showUserCount);
