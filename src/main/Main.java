@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 
+import backendgame.com.core.BGUtility;
 import zkteco.ZKTeco4370_AttendanceLog;
 import zkteco.ZKTeco4370_DeviceInfo;
 import zkteco.ZKTeco4370_UserInfo;
@@ -39,8 +40,8 @@ public class Main {
 			testDevice(label, ip, port, pwd);
 		} else {
 			System.out.println("Chay kiem thu mac dinh tren cac thiet bi LAN co san:\n");
-			testDevice("MAY: ZKTECO iSCAN-03 / ZEM560 (LEGACY)", "192.168.1.190", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
-//			testDevice("MAY: ZKTECO iSCAN-03 / ZEM560 (LEGACY)", "192.168.1.33", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
+//			testDevice("MAY: ZKTECO iSCAN-03 / ZEM560 (LEGACY)", "192.168.1.190", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
+			testDevice("MAY: ZKTECO iSCAN-03 / ZEM560 (LEGACY)", "192.168.1.33", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
 //			testDevice("MAY: ZKTECO iSCAN-03 / ZEM560 (LEGACY)", "42.112.179.197", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
 		}
 
@@ -70,6 +71,7 @@ public class Main {
 			System.out.printf("   + Face Count         : %d%n", info.getFaceCount());
 			System.out.printf("   + Log Count          : %d%n", info.getLogCount());
 			System.out.printf("   + UTC Offset         : %s%n", zk.getUTC());
+			BGUtility.trace(zk.getCloudConfig());
 			System.out.println("   => [PASS] ZKTeco4370_DeviceInfo");
 
 			System.out.println("\n>>> [2] Lay danh sach user(userID, name, ngay tao)");

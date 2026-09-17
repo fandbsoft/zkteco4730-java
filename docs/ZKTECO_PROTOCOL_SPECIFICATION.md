@@ -268,3 +268,17 @@ Dữ liệu phản hồi gồm các số nguyên 32-bit Little-Endian tại các
    * `CMD_OPTIONS_WRQ` có thể ghi/đọc lại các key như `timezone`, `TimeZone`, `GMTOffset`, `UTCOffset`, nhưng các key này không đổi timezone UI thật trên SenseFace 2A secure firmware đã test.
    * `zkemkeeper.dll` 32-bit bản `6.3.1.55` cũng cho kết quả tương tự với `SetSysOption(...)`: ghi/readback thành công nhưng UI timezone vẫn không đổi.
    * Vì vậy SDK chỉ suy ra UTC offset bằng `CMD_GET_TIME` để chuyển đổi log; không expose hàm set UTC/GMT offset.
+
+---
+
+## 7. CẤU HÌNH MÁY CHỦ ĐÁM MÂY (CLOUD SERVER / ADMS) QUA CỔNG 4370
+
+Hoàn toàn có thể cấu hình máy chủ đám mây từ xa cho máy chấm công thông qua các lệnh trên cổng 4370:
+1. **Lệnh ghi tham số cấu hình**: `CMD_OPTIONS_WRQ = 12` (`0x000C`).
+2. **Lệnh áp dụng cấu hình**: `CMD_REFRESHOPTION = 1014` (`0x03F6`).
+3. **Các tham số cấu hình đám mây chuẩn**:
+   * `WebServerURL`: Tên miền hoặc IP của Cloud Server (ví dụ: `cloud.domain.com` hoặc `103.x.x.x`).
+   * `WebServerPort`: Cổng dịch vụ của Cloud Server (thường là `80`, `8080`, `8081`, `443`...).
+   * `IsPush` / `PushFunOn`: Bật (`1`) hoặc tắt (`0`) cơ chế tự động đẩy dữ liệu lên Cloud.
+   * `EnableDomainName`: Bật (`1`) chế độ phân giải tên miền DNS nếu dùng URL dạng Domain.
+   * `PushCommKey` / `PushToken`: Mã bảo mật xác thực của Cloud Server.

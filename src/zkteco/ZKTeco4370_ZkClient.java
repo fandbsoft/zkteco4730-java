@@ -531,6 +531,203 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 	}
 
 	/**
+	 * Cấu hình toàn diện máy chủ đám mây (Cloud Server / ADMS / WebServer) cho máy chấm công qua cổng 4370.
+	 *
+	 * @param serverUrl Địa chỉ IP hoặc tên miền máy chủ đám mây (ví dụ: "cloud.example.com" hoặc "103.1.2.3").
+	 * @param serverPort Cổng máy chủ đám mây (ví dụ: 80, 443, 8080, 8081...).
+	 * @param useHttps true nếu sử dụng kết nối bảo mật HTTPS (SSL/TLS), false nếu dùng HTTP thường.
+	 * @param enablePush true để kích hoạt chế độ tự động đẩy dữ liệu lên đám mây, false để tắt.
+	 * @param rebootAfter true nếu muốn tự động khởi động lại máy ngay sau khi cấu hình để kích hoạt daemon đám mây.
+	 * @return true nếu ghi cấu hình thành công, false nếu thất bại.
+	 */
+	public synchronized boolean setCloudServer(String serverUrl, int serverPort, boolean useHttps, boolean enablePush, boolean rebootAfter) throws IOException {
+		ensureInteractiveCommandReady();
+		boolean success = true;
+		if (serverUrl != null && !serverUrl.isBlank()) {
+			String cleanUrl = serverUrl.trim();
+			success &= setDeviceOption("WebServerURL", cleanUrl);
+			success &= setDeviceOption("WebServerIP", cleanUrl);
+			// Bật phân giải DNS nếu serverUrl là tên miền
+			if (!cleanUrl.matches("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$")) {
+				setDeviceOption("EnableDomainName", "1");
+			}
+		}
+
+		if (serverPort > 0) {
+			success &= setDeviceOption("WebServerPort", String.valueOf(serverPort));
+		}
+
+		// Kích hoạt HTTP hoặc HTTPS
+		String httpsVal = useHttps ? "1" : "0";
+		setDeviceOption("HTTPS", httpsVal);
+		setDeviceOption("HTTPSEnable", httpsVal);
+		setDeviceOption("IsHTTPS", httpsVal);
+		setDeviceOption("PushProt", useHttps ? "1" : "0");
+
+		// Bật / tắt chế độ Push tự động
+		String pushVal = enablePush ? "1" : "0";
+		setDeviceOption("IsPush", pushVal);
+		setDeviceOption("PushFunOn", pushVal);
+
+		// Làm mới cấu hình trên máy
+		refreshOptions();
+
+		// Tùy chọn khởi động lại thiết bị để daemon ADMS boot lại
+		if (rebootAfter) {
+			try {
+				restartDevice();
+			} catch (Exception ignored) {
+			}
+		}
+
+		return success;
+	}
+
+	public synchronized boolean setCloudServer(String serverUrl, int serverPort, boolean useHttps, boolean rebootAfter) throws IOException {
+		return setCloudServer(serverUrl, serverPort, useHttps, true, rebootAfter);
+	}
+
+	public synchronized boolean setCloudServer(String serverUrl, int serverPort, boolean useHttps) throws IOException {
+		return setCloudServer(serverUrl, serverPort, useHttps, true, false);
+	}
+
+	public synchronized boolean setCloudServer(String serverUrl, int serverPort) throws IOException {
+		boolean useHttps = (serverPort == 443) || (serverUrl != null && serverUrl.toLowerCase().startsWith("https://"));
+		return setCloudServer(serverUrl, serverPort, useHttps, true, false);
+	}
+
+	/**
+	 * Kiểm tra xem thiết bị có đang cấu hình chế độ kết nối bảo mật HTTPS với máy chủ đám mây không.
+	 */
+	public synchronized boolean isCloudHttpsEnabled() throws IOException {
+		String https = getDeviceOption("HTTPS");
+		if ("1".equals(https)) return true;
+		if ("0".equals(https)) return false;
+
+		String httpsEnable = getDeviceOption("HTTPSEnable");
+		if ("1".equals(httpsEnable)) return true;
+		if ("0".equals(httpsEnable)) return false;
+
+		String pushProt = getDeviceOption("PushProt");
+		if ("1".equals(pushProt)) return true;
+		if ("0".equals(pushProt)) return false;
+
+		int port = getCloudServerPort();
+		if (port == 443) return true;
+
+		String url = getDeviceOption("WebServerURL");
+		return url != null && url.toLowerCase().startsWith("https://");
+	}
+
+	/**
+	 * Lấy địa chỉ URL hoặc IP của máy chủ đám mây đang được cấu hình trên thiết bị.
+	 */
+	public synchronized String getCloudServerUrl() throws IOException {
+		String url = getDeviceOption("WebServerURL");
+		if (url == null || url.isBlank()) {
+			url = getDeviceOption("WebServerIP");
+		}
+		return url != null ? url.trim() : "";
+	}
+
+	/**
+	 * Lấy cổng kết nối máy chủ đám mây đang được cấu hình trên thiết bị.
+	 */
+	public synchronized int getCloudServerPort() throws IOException {
+		String portStr = getDeviceOption("WebServerPort");
+		try {
+			return Integer.parseInt(portStr);
+		} catch (Exception e) {
+			return 0;
+		}
+	}
+
+	/**
+	 * Đọc toàn bộ thông tin cấu hình máy chủ đám mây (Cloud Server / ADMS) từ thiết bị.
+	 * Dùng để trả dữ liệu cấu hình hiển thị trên giao diện Web / API.
+	 *
+	 * @return Đối tượng {@link ZKTeco4370_CloudConfig} chứa: ipServer, portServer, isHttps...
+	 */
+	public synchronized ZKTeco4370_CloudConfig getCloudConfig() throws IOException {
+		ensureInteractiveCommandReady();
+		String url = getCloudServerUrl();
+		int port = getCloudServerPort();
+		boolean isHttps = isCloudHttpsEnabled();
+
+		String isPush = getDeviceOption("IsPush");
+		String pushFunOn = getDeviceOption("PushFunOn");
+		boolean pushEnabled = "1".equals(isPush) || "1".equals(pushFunOn);
+
+		String enableDomain = getDeviceOption("EnableDomainName");
+		boolean domainEnabled = "1".equals(enableDomain) || (!url.isBlank() && !url.matches("^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$"));
+
+		return new ZKTeco4370_CloudConfig(url, port, isHttps, pushEnabled, domainEnabled);
+	}
+
+	/**
+	 * Áp dụng cấu hình máy chủ đám mây từ đối tượng {@link ZKTeco4370_CloudConfig}.
+	 *
+	 * @param config Đối tượng cấu hình nhận từ giao diện Web / API.
+	 * @param rebootAfter true nếu muốn tự động khởi động lại máy để kích hoạt daemon đám mây ngay.
+	 * @return true nếu ghi cấu hình thành công, false nếu thất bại.
+	 */
+	public synchronized boolean setCloudConfig(ZKTeco4370_CloudConfig config, boolean rebootAfter) throws IOException {
+		if (config == null) {
+			return false;
+		}
+		return setCloudServer(config.getIpServer(), config.getPortServer(), config.isHttps(), config.isPushEnabled(), rebootAfter);
+	}
+
+	/**
+	 * Áp dụng cấu hình máy chủ đám mây từ đối tượng {@link ZKTeco4370_CloudConfig} (không tự động reboot).
+	 */
+	public synchronized boolean setCloudConfig(ZKTeco4370_CloudConfig config) throws IOException {
+		return setCloudConfig(config, false);
+	}
+
+	/**
+	 * Tắt chế độ máy chủ đám mây và xóa URL đám mây trên thiết bị.
+	 */
+	public synchronized boolean disableCloudServer() throws IOException {
+		ensureInteractiveCommandReady();
+		boolean success = true;
+		success &= setDeviceOption("WebServerURL", "");
+		String deviceIp = getDeviceOption("IPAddress");
+		if (deviceIp != null && !deviceIp.isBlank()) {
+			setDeviceOption("WebServerIP", deviceIp);
+		} else {
+			setDeviceOption("WebServerIP", "");
+		}
+		setDeviceOption("IsPush", "0");
+		setDeviceOption("PushFunOn", "0");
+		setDeviceOption("HTTPS", "0");
+		setDeviceOption("HTTPSEnable", "0");
+		setDeviceOption("PushProt", "0");
+		refreshOptions();
+		return success;
+	}
+
+	/**
+	 * Khởi động lại máy chấm công từ xa qua lệnh CMD_RESTART (1004).
+	 * Thường dùng sau khi thay đổi cấu hình mạng, IP hoặc cấu hình máy chủ đám mây.
+	 *
+	 * @return true nếu thiết bị phản hồi chấp nhận lệnh reboot, false nếu thất bại.
+	 */
+	public synchronized boolean restartDevice() throws IOException {
+		ensureInteractiveCommandReady();
+		sendPacket(ZKTeco4370_ZkConstants.CMD_RESTART, new byte[0]);
+		try {
+			ZKTeco4370_ZkPacket response = receivePacket();
+			return response.isOk();
+		} catch (EOFException | java.net.SocketException e) {
+			// Nhiều firmware ZKTeco ngắt kết nối socket ngay lập tức khi reboot
+			return true;
+		} finally {
+			close();
+		}
+	}
+
+	/**
 	 * Vô hiệu hóa bàn phím và màn hình thiết bị (CMD_DISABLEDEVICE = 1003).
 	 * Thường dùng khi đồng bộ dữ liệu lớn hoặc ghi cấu hình/RTC để tránh người dùng thao tác.
 	 *
