@@ -41,7 +41,7 @@ public class Main {
 		} else {
 			System.out.println("Chay kiem thu mac dinh tren cac thiet bi LAN co san:\n");
 //			testDevice("MAY: ZKTECO iSCAN-03 / ZEM560 (LEGACY)", "192.168.1.190", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
-			testDevice("MAY: ZKTECO iSCAN-03 / ZEM560 (LEGACY)", "192.168.1.33", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
+			testDevice("MAY: ZKTECO SENSEFACE 2A (SECURE)", "192.168.1.33", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
 //			testDevice("MAY: ZKTECO iSCAN-03 / ZEM560 (LEGACY)", "42.112.179.197", ZKTeco4370_ZkConstants.DEFAULT_PORT, 111111);
 		}
 

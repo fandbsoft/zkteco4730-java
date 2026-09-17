@@ -29,11 +29,6 @@
 
     <dependencies>
 		<dependency>
-			<groupId>backendgame.com</groupId>
-			<artifactId>backendgame.com</artifactId>
-			<version>1.0</version>
-		</dependency>
-		<dependency>
 			<groupId>com.google.code.gson</groupId>
 			<artifactId>gson</artifactId>
 			<version>2.13.2</version>

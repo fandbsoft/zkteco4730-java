@@ -457,12 +457,21 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 	public synchronized boolean unlock() throws IOException {
 		return unlock(ZKTeco4370_ZkConstants.DEFAULT_UNLOCK_DELAY_SECONDS);
 	}
+	synchronized ZKTeco4370_ZkPacket sendCommandAndReceive(int command, byte[] payload) throws IOException {
+		ensureInteractiveCommandReady();
+		sendPacket(command, payload != null ? payload : new byte[0]);
+		return receivePacket();
+	}
 
-	public synchronized String getDeviceOption(String key) throws IOException {
+	synchronized ZKTeco4370_ZkPacket queryOptionPacket(String key) throws IOException {
 		ensureInteractiveCommandReady();
 		byte[] payload = ((key != null ? key : "") + "\0").getBytes(StandardCharsets.US_ASCII);
 		sendPacket(ZKTeco4370_ZkConstants.CMD_OPTIONS_RRQ, payload);
-		ZKTeco4370_ZkPacket response = receivePacket();
+		return receivePacket();
+	}
+
+	public synchronized String getDeviceOption(String key) throws IOException {
+		ZKTeco4370_ZkPacket response = queryOptionPacket(key);
 		if (response.getPayloadLength() == 0) {
 			return "";
 		}
@@ -600,22 +609,17 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 	 * Kiểm tra xem thiết bị có đang cấu hình chế độ kết nối bảo mật HTTPS với máy chủ đám mây không.
 	 */
 	public synchronized boolean isCloudHttpsEnabled() throws IOException {
-		String https = getDeviceOption("HTTPS");
-		if ("1".equals(https)) return true;
-		if ("0".equals(https)) return false;
-
-		String httpsEnable = getDeviceOption("HTTPSEnable");
-		if ("1".equals(httpsEnable)) return true;
-		if ("0".equals(httpsEnable)) return false;
-
-		String pushProt = getDeviceOption("PushProt");
-		if ("1".equals(pushProt)) return true;
-		if ("0".equals(pushProt)) return false;
+		String[] httpsKeys = {"HTTPS", "HTTPSEnable", "IsHTTPS", "PushProt"};
+		for (String key : httpsKeys) {
+			String val = getDeviceOption(key);
+			if ("1".equals(val) || "true".equalsIgnoreCase(val)) return true;
+			if ("0".equals(val) || "false".equalsIgnoreCase(val)) return false;
+		}
 
 		int port = getCloudServerPort();
 		if (port == 443) return true;
 
-		String url = getDeviceOption("WebServerURL");
+		String url = getCloudServerUrl();
 		return url != null && url.toLowerCase().startsWith("https://");
 	}
 
@@ -623,23 +627,43 @@ public class ZKTeco4370_ZkClient implements AutoCloseable {
 	 * Lấy địa chỉ URL hoặc IP của máy chủ đám mây đang được cấu hình trên thiết bị.
 	 */
 	public synchronized String getCloudServerUrl() throws IOException {
-		String url = getDeviceOption("WebServerURL");
-		if (url == null || url.isBlank()) {
-			url = getDeviceOption("WebServerIP");
+		String[] candidateKeys = {
+			"WebServerURL",
+			"WebServerIP",
+			"ServerURL",
+			"ServerIP",
+			"PushServerURL",
+			"PushServerIP",
+			"ADMSURL",
+			"ADMSIP"
+		};
+		for (String key : candidateKeys) {
+			String val = getDeviceOption(key);
+			if (val != null && !val.isBlank()) {
+				return val.trim();
+			}
 		}
-		return url != null ? url.trim() : "";
+		return "";
 	}
 
 	/**
 	 * Lấy cổng kết nối máy chủ đám mây đang được cấu hình trên thiết bị.
 	 */
 	public synchronized int getCloudServerPort() throws IOException {
-		String portStr = getDeviceOption("WebServerPort");
-		try {
-			return Integer.parseInt(portStr);
-		} catch (Exception e) {
-			return 0;
+		String[] portKeys = {"WebServerPort", "ServerPort", "PushServerPort", "ADMSPort"};
+		for (String key : portKeys) {
+			String portStr = getDeviceOption(key);
+			if (portStr != null && !portStr.isBlank()) {
+				try {
+					int p = Integer.parseInt(portStr.trim());
+					if (p > 0 && p <= 65535) {
+						return p;
+					}
+				} catch (Exception ignored) {
+				}
+			}
 		}
+		return 0;
 	}
 
 	/**
